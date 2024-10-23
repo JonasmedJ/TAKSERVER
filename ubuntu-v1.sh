@@ -291,7 +291,8 @@ fi
 
 # Ensure COUNTRY input is exactly 2 letters
 while true; do
-    read -p "What country are you in? (2 letters): " COUNTRY
+    read -p "
+    Input your country (MAX 2 letters): " COUNTRY
     if [[ "$COUNTRY" =~ ^[a-zA-Z]{2}$ ]]; then
         # Convert to uppercase (optional)
         COUNTRY=$(echo "$COUNTRY" | tr '[:lower:]' '[:upper:]')
@@ -301,10 +302,14 @@ while true; do
     fi
 done
 
-read -p "What is your state? : " STATE
-read -p "What is your city? : " CITY
-read -p "What is your organization called? : " ORGANIZATION
-read -p "What is your unit called? : " ORGANIZATIONAL_UNIT
+read -p "
+Input your state: " STATE
+read -p "
+Input your city: " CITY
+read -p "
+Input your organization: " ORGANIZATION
+read -p "
+Input your unit: " ORGANIZATIONAL_UNIT
 
 # Ensure password constraints
 while true; do
