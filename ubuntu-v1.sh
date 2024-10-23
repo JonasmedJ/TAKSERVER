@@ -243,8 +243,21 @@ sleep 60
 
 # Display certificate metadata instructions
 echo "
+*****IMPORTANT, READ BELOW*****
+
+- You should edit the Cert-metadata.sh file with your specifics. 
+
+- Be aware of the following:
+
+The Country part cannot be longer than two letters
+The password should replace 'atakatak'
+The password cannot be longer than 10 characters
+The password cannot contain unique characters.
+
+"
 
 # Prompt user for confirmation
+
 confirmation=""
 while true; do
   read -p "
@@ -260,6 +273,7 @@ Please take a moment to read the instructions before proceeding."
     echo "Invalid input. Please enter 'y' for yes or 'n' for no."
   fi
 done
+
 
 # Define the filename
 certmetadata="/opt/tak/certs/cert-metadata.sh"
