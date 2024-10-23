@@ -244,62 +244,89 @@ sleep 60
 # Display certificate metadata instructions
 echo "
 
-*****IMPORTANT, READ BELOW*****
-
-- You should edit the Cert-metadata.sh file with your specifics. 
-
-- Be aware of the following:
-
-The Country part cannot be longer than two letters
-The password should replace 'atakatak'
-The password cannot be longer than 10 characters
-The password cannot contain unique characters.
-
-"
-
 # Prompt user for confirmation
 confirmation=""
-while [ "$confirmation" != "y" ]; do
+while true; do
   read -p "
 Have you read and understood the instructions above? (y/n): " confirmation
   confirmation=$(echo "$confirmation" | tr '[:upper:]' '[:lower:]')
-  if [ "$confirmation" != "y" ]; then
+
+  if [ "$confirmation" == "y" ]; then
+    break
+  elif [ "$confirmation" == "n" ]; then
     echo "
 Please take a moment to read the instructions before proceeding."
+  else
+    echo "Invalid input. Please enter 'y' for yes or 'n' for no."
   fi
 done
 
 # Define the filename
 certmetadata="/opt/tak/certs/cert-metadata.sh"
 
-# Check if the file exists
-if [ -e "$certmetadata" ]; then
-    while true; do
-        # Ask the user which text editor to use
-        read -p "
-        Do you want to edit '$certmetadata' using Nano (N) or Vim (V)? [N/v] " choice
-
-        # Convert the choice to lowercase for case-insensitive comparison
-        choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
-
-        case "$choice" in
-            "v")
-                vim "$certmetadata"
-                break
-                ;;
-            "n")
-                nano "$certmetadata"
-                break
-                ;;
-            *)
-                echo "Invalid choice. Please select 'N' for Nano or 'V' for Vim."
-                ;;
-        esac
-    done
-else
+# Check if the file exists and if the script has write permissions
+if [ ! -e "$certmetadata" ]; then
     echo "File '$certmetadata' does not exist."
+    exit 1
+elif [ ! -w "$certmetadata" ]; then
+    echo "No write permission to '$certmetadata'. Please check your file permissions."
+    exit 1
 fi
 
+# Prompt the user for details to replace in the cert-metadata
+
+# Ensure COUNTRY input is exactly 2 letters
+while true; do
+    read -p "What country are you in? (2 letters): " COUNTRY
+    if [[ "$COUNTRY" =~ ^[a-zA-Z]{2}$ ]]; then
+        # Convert to uppercase (optional)
+        COUNTRY=$(echo "$COUNTRY" | tr '[:lower:]' '[:upper:]')
+        break
+    else
+        echo "Country must be exactly 2 letters (no numbers or special characters)."
+    fi
+done
+
+read -p "What is your state? : " STATE
+read -p "What is your city? : " CITY
+read -p "What is your organization called? : " ORGANIZATION
+read -p "What is your unit called? : " ORGANIZATIONAL_UNIT
+
+# Ensure password constraints
+while true; do
+    read -p "What password should be used for your certificates? (max 15 characters, only letters and numbers): " PASS
+    if [[ ${#PASS} -le 15 && "$PASS" =~ ^[a-zA-Z0-9]+$ ]]; then
+        break
+    else
+        echo "Password must be at most 15 characters long and contain only letters and numbers."
+    fi
+done
+
+# Substitute the variables in the cert-metadata script
+# Escape any special characters in variables to avoid issues with sed
+COUNTRY_ESCAPED=$(echo "$COUNTRY" | sed 's/[&/\]/\\&/g')
+STATE_ESCAPED=$(echo "$STATE" | sed 's/[&/\]/\\&/g')
+CITY_ESCAPED=$(echo "$CITY" | sed 's/[&/\]/\\&/g')
+ORGANIZATION_ESCAPED=$(echo "$ORGANIZATION" | sed 's/[&/\]/\\&/g')
+ORGANIZATIONAL_UNIT_ESCAPED=$(echo "$ORGANIZATIONAL_UNIT" | sed 's/[&/\]/\\&/g')
+PASS_ESCAPED=$(echo "$PASS" | sed 's/[&/\]/\\&/g')
+
+# Replace variables in the cert-metadata file
+sed -i "s/^COUNTRY=.*/COUNTRY=$COUNTRY_ESCAPED/" "$certmetadata"
+sed -i "s/^STATE=.*/STATE=$STATE_ESCAPED/" "$certmetadata"
+sed -i "s/^CITY=.*/CITY=$CITY_ESCAPED/" "$certmetadata"
+sed -i "s/^ORGANIZATION=.*/ORGANIZATION=$ORGANIZATION_ESCAPED/" "$certmetadata"
+sed -i "s/^ORGANIZATIONAL_UNIT=.*/ORGANIZATIONAL_UNIT=$ORGANIZATIONAL_UNIT_ESCAPED/" "$certmetadata"
+
+# Replace the password in the CAPASS line
+if grep -q '^CAPASS=' "$certmetadata"; then
+    sed -i "s/\(CAPASS=\${CAPASS:-\)[^}]*\}/\1$PASS_ESCAPED}/" "$certmetadata"
+    echo "Password in CAPASS has been updated."
+else
+    echo "'CAPASS' not found in $certmetadata. Please check the file content."
+fi
+
+echo "cert-metadata.sh has been updated."
 
 # Prompt the user for the RootCA name
 echo -n "
