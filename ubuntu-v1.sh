@@ -442,7 +442,7 @@ Which Linux firewall are you using (ufw/unspecified)? " firewall_choice
 
 # Function to prompt the user for firewall choice
 ask_firewall_choice() {
-    echo "Please select a firewall to configure (firewalld, UFW, or 'unspecified' for manual setup):"
+    echo "Please select a firewall to configure (UFW, or unspecified for manual setup):"
     read -r firewall_choice
 }
 
@@ -540,11 +540,11 @@ TAK server installation complete. Please continue to your browser of choice, and
 *** If you encounter this error: 
 "Caused by: class org.apache.ignite.IgniteException: Failed to find deployed service: distributed-user-file-manager"
 
-- This is due to services in the TAK service not being fully started yet. Either upgrade your hardware/VM, and run:
+- This is due to services in the TAK service not being fully started yet. Either upgrade your hardware/VM, or restart the takserver, and then run:
 
 > sudo java -jar /opt/tak/utils/UserManager.jar certmod -A /opt/tak/certs/files/admin.pem
 
-This may take a couple of tries, depending on your hardware specs. Sometimes a full reboot should suffice.***
+This may take a couple of tries, depending on your hardware specs. Usually a full reboot should suffice.***
 
 Good luck with TAK!
 "
