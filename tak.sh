@@ -6,6 +6,23 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Use a case statement to run the corresponding function
+case $choice in
+    1)
+        install_tak_server
+        ;;
+    2)
+        recreate_certificates
+        ;;
+    3)
+        create_zip_file
+        ;;
+    *)
+        echo "Invalid option. Please run the script again and select a valid option."
+        ;;
+esac
+
+
 # Function to install TAK server on Ubuntu
 install_tak_server() {
     echo "Installing TAK server on Ubuntu..."
@@ -1114,19 +1131,3 @@ echo "
     3) Create a .zip file for users"
 read -p "
 Enter the number of your choice: " choice
-
-# Use a case statement to run the corresponding function
-case $choice in
-    1)
-        install_tak_server
-        ;;
-    2)
-        recreate_certificates
-        ;;
-    3)
-        create_zip_file
-        ;;
-    *)
-        echo "Invalid option. Please run the script again and select a valid option."
-        ;;
-esac
