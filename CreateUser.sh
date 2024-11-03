@@ -194,6 +194,66 @@ cat > "$config_pref" <<EOL
     <entry key="atakRoleType" class="class java.lang.String">${Unit_Role}</entry>
     <entry key="deviceProfileEnableOnConnect" class="class java.lang.Boolean">true</entry>
 
+EOL
+
+# Prompt the user to add extra preferences
+read -p "Do you want to add extra preferences? (yes/no): " add_prefs
+if [[ $add_prefs == "yes" ]]; then
+    cat >> "$config_pref" <<EOL
+    <entry key="coord_display_pref" class="class java.lang.String">MGRS</entry>
+    <entry key="alt_display_pref" class="class java.lang.String">MSL</entry>
+    <entry key="alt_unit_pref" class="class java.lang.String">1</entry>
+    <entry key="speed_unit_pref" class="class java.lang.String">1</entry>
+    <entry key="rab_brg_units_pref" class="class java.lang.String">1</entry>
+    <entry key="rab_rng_units_pref" class="class java.lang.String">1</entry>
+    <entry key="staleRemoteDisconnects" class="class java.lang.Boolean">false</entry>
+    <entry key="expireEverything" class="class java.lang.Boolean">false</entry>
+    <entry key="expireUnknowns" class="class java.lang.Boolean">false</entry>
+    <entry key="map_center_designator" class="class java.lang.Boolean">true</entry>
+    <entry key="atakLongPressMap" class="class java.lang.String">nothing</entry>
+    <entry key="displayServerConnectionWidget" class="class java.lang.Boolean">true</entry>
+EOL
+fi
+
+# Prompt the user to hide menu options
+read -p "Do you want to hide any menu options? (yes/no): " hide_menus
+if [[ $hide_menus == "yes" ]]; then
+    cat >> "$config_pref" <<EOL
+    ## Hide menu options
+    <entry key="hidePreferenceItem_atakAccounts" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_geocoderPreferences" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_geocodeSupplier" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_atakAdjustCurvedDisplay" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_deviceProfileEnableOnConnect" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_atakChangeLog" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_hostileUpdateDelay" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_apiCertEnrollmentPort" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_apiCertEnrollmentKeyLength" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_chatAddress" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_chatPort" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_encryptionPassphrase" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_configureNonStreamingEncryption" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_clientPassword" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_certificateLocation" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_default_client_credentials" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_caLocation" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_caPassword" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_network_dhcp" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_dexControls" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_network_static_ip_address" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_isrvNetworkPreference" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_apiSecureServerPort" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_apiUnsecureServerPort" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_publishCategory" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_reportingSettings" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_locationReportingStrategy" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_manageInputsLink" class="class java.lang.Boolean">true</entry>
+    <entry key="hidePreferenceItem_manageOutputsLink" class="class java.lang.Boolean">true</entry>
+EOL
+fi
+
+# Close the preferences block
+cat >> "$config_pref" <<EOL
   </preference>
 </preferences>
 EOL
