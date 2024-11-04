@@ -675,13 +675,13 @@ while true; do
 done
 
 read -p "
-Input your state: " STATE
+    Input your state: " STATE
 read -p "
-Input your city: " CITY
+    Input your city: " CITY
 read -p "
-Input your organization: " ORGANIZATION
+    Input your organization: " ORGANIZATION
 read -p "
-Input your unit: " ORGANIZATIONAL_UNIT
+    Input your unit: " ORGANIZATIONAL_UNIT
 
 # Ensure password constraints
 while true; do
@@ -1129,6 +1129,8 @@ while true; do
     echo "
       5) Uninstall TAK Server"
     echo "
+      6) Exit"
+    echo "
     Enter your choice: "
     read choice
 
@@ -1138,7 +1140,19 @@ while true; do
             install_tak_server
             ;;
         2)
-            recreate_certificates
+            while true; do
+                echo "Are you sure you want to recreate certificates? This will overwrite existing ones. (y/n)"
+                read confirmation
+                if [[ "$confirmation" == "y" || "$confirmation" == "Y" || "$confirmation" == "yes" || "$confirmation" == "YES" ]]; then
+                    recreate_certificates
+                    break # Exits the confirmation loop after recreating certificates
+                elif [[ "$confirmation" == "n" || "$confirmation" == "N" || "$confirmation" == "no" || "$confirmation" == "NO" ]]; then
+                    echo "Certificate recreation canceled."
+                    break # Exits the confirmation loop, returns to main menu
+                else
+                    echo "Invalid input. Please enter 'y' for yes or 'n' for no."
+                fi
+            done
             ;;
         3)
             create_zip_file
@@ -1160,6 +1174,10 @@ while true; do
                     echo "Invalid input. Please enter 'y' for yes or 'n' for no."
                 fi
             done
+            ;;
+        6)
+            echo "Exiting script"
+            break # Exits the main loop and ends the script
             ;;
         *)
             echo "Invalid option. Please select a valid option."
