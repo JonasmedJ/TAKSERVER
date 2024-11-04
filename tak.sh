@@ -6,23 +6,6 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Use a case statement to run the corresponding function
-case $choice in
-    1)
-        install_tak_server
-        ;;
-    2)
-        recreate_certificates
-        ;;
-    3)
-        create_zip_file
-        ;;
-    *)
-        echo "Invalid option. Please run the script again and select a valid option."
-        ;;
-esac
-
-
 # Function to install TAK server on Ubuntu
 install_tak_server() {
     echo "Installing TAK server on Ubuntu..."
@@ -1119,15 +1102,67 @@ echo "Script completed successfully."
 
 }
 
-# Prompt the user to select an option
-echo "
-Please select an option:"
 
-echo "
-    1) Install TAK server on Ubuntu"
-echo "
-    2) Recreate certificates"
-echo "
-    3) Create a .zip file for users"
-read -p "
-Enter the number of your choice: " choice
+change_default_values() {
+    echo "Changing default values for user creation..."
+    # Call the function to change defaults
+    change_defaults
+}
+
+
+uninstall_tak_server() {
+    echo "Uninstalling TAK Server..."
+    # Add your uninstall commands here
+}
+
+while true; do
+    # Prompt user for action
+    echo "Select an option:"
+    echo "
+      1) Install TAK Server"
+    echo "
+      2) Recreate Certificates"
+    echo "
+      3) Create Zip File for User"
+    echo "
+      4) Change Default Values for User Creation"
+    echo "
+      5) Uninstall TAK Server"
+    echo "
+    Enter your choice: "
+    read choice
+
+    # Use case statement to run the corresponding function
+    case $choice in
+        1)
+            install_tak_server
+            ;;
+        2)
+            recreate_certificates
+            ;;
+        3)
+            create_zip_file
+            ;;
+        4)
+            change_default_values
+            ;;
+        5)
+            while true; do
+                echo "Are you sure you want to uninstall the TAK Server? This action cannot be undone. (y/n)"
+                read confirmation
+                if [[ "$confirmation" == "y" || "$confirmation" == "Y" || "$confirmation" == "yes" || "$confirmation" == "YES" ]]; then
+                    uninstall_tak_server
+                    break 2 # Exits both loops after uninstalling
+                elif [[ "$confirmation" == "n" || "$confirmation" == "N" || "$confirmation" == "no" || "$confirmation" == "NO" ]]; then
+                    echo "Uninstall canceled."
+                    break # Exits the confirmation loop, returns to main menu
+                else
+                    echo "Invalid input. Please enter 'y' for yes or 'n' for no."
+                fi
+            done
+            ;;
+        *)
+            echo "Invalid option. Please select a valid option."
+            ;;
+    esac
+done
