@@ -1112,7 +1112,25 @@ change_default_values() {
 
 uninstall_tak_server() {
     echo "Uninstalling TAK Server..."
-    # Add your uninstall commands here
+    
+    sudo systemctl stop takserver
+
+    sudo apt-get remove takserver -y && sudo apt-get purge takserver -y
+
+    sudo rm -r /opt/tak
+  
+
+    sudo apt-get --purge remove postgresql postgresql-* -y
+
+    sudo rm -r /var/log/postgresql -y
+
+    sudo rm -r /var/lib/postgresql -y
+
+    sudo rm -r /etc/postgresql -y
+
+    sudo apt autoremove -y
+
+    echo "TAK Server removal successfull"
 }
 
 while true; do
@@ -1131,7 +1149,7 @@ while true; do
     echo "
       6) Exit"
     echo "
-    Enter your choice: "
+    Enter your choice: " 
     read choice
 
     # Use case statement to run the corresponding function

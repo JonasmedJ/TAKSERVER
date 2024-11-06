@@ -15,6 +15,7 @@
     <entry key="coord_display_pref" class="class java.lang.String">MGRS</entry>
     <entry key="staleRemoteDisconnects" class="class java.lang.Boolean">true</entry>
     <entry key="displayServerConnectionWidget" class="class java.lang.Boolean">true</entry>
+    <entry key="hostileUpdateDelay" class="class java.lang.String">0</entry>
     
     ## Hide menu options
 
