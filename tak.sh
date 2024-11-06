@@ -147,9 +147,11 @@ if [[ -n "$POLICY_FILE" ]]; then
     # Proceed with your script logic
   else
     echo "No ID found in the deb_policy.pol file."
+    exit 1
   fi
 else
-  echo "deb_policy.pol file not found."
+  echo "deb_policy.pol file not found. Please ensure it is downloaded to your filesystem."
+  exit 1
 fi
 
     sudo mkdir -p /usr/share/debsig/keyrings/$id_input
@@ -176,8 +178,6 @@ fi
       exit 1
     fi
 
-#!/bin/bash
-
 # Search for the TAK server .deb file (search the system or home directory)
 takserver_file=$(find "$SEARCH_DIR" -name 'takserver_*_all.deb' -print -quit 2>/dev/null)
 
@@ -201,9 +201,18 @@ if [[ -n "$takserver_file" ]]; then
             fi
         fi
 
-        # Use the full path to the .deb file here (not just the version)
+        # Move the TAK server file to /tmp if it's not already there
+        if [[ "$takserver_file" != /tmp/* ]]; then
+            echo "Moving TAK server file to /tmp directory..."
+            mv "$takserver_file" /tmp/
+            takserver_file="/tmp/$(basename "$takserver_file")"
+            echo "File moved to $takserver_file"
+        else
+            echo "TAK server file is already in /tmp, skipping move."
+        fi
+
+        # Proceed with TAK server installation
         echo "Proceeding with TAK server installation for $takserver_file..."
-        # Example command that uses the full file path
         sudo debsig-verify "$takserver_file"
     else
         echo "TAK server file does not match expected pattern."
@@ -213,6 +222,7 @@ else
     echo "TAK server file not found."
     exit 1
 fi
+
 
 
 # Verify the package
@@ -231,7 +241,7 @@ sudo sh -c 'echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] http://apt.po
 # Update and install takserver
 sudo apt update && sudo apt upgrade
 
-sudo apt install $takserver_file
+sudo apt install $takserver_file -y
 
 # Check Java version
 java_version=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}')
@@ -675,13 +685,13 @@ while true; do
 done
 
 read -p "
-    Input your state: " STATE
+Input your state: " STATE
 read -p "
-    Input your city: " CITY
+Input your city: " CITY
 read -p "
-    Input your organization: " ORGANIZATION
+Input your organization: " ORGANIZATION
 read -p "
-    Input your unit: " ORGANIZATIONAL_UNIT
+Input your unit: " ORGANIZATIONAL_UNIT
 
 # Ensure password constraints
 while true; do
@@ -719,18 +729,31 @@ fi
 
 echo "cert-metadata.sh has been updated."
 
-# Prompt the user for the RootCA name
-echo -n "
-Enter the RootCA name you want, eg. Root-CA-01: "
-read -r root_ca_name
+# Prompt for RootCA name with validation
+while true; do
+  echo -n "Enter the RootCA name you want, e.g., Root-CA-01: "
+  read -r root_ca_name
+  if [[ -n "$root_ca_name" ]]; then
+    break
+  else
+    echo "Error: Please input a name for your Root CA."
+  fi
+done
 
 # Run the makeRootCa.sh script with the provided name
 sudo su tak -c "cd /opt/tak/certs && ./makeRootCa.sh --ca-name '$root_ca_name' < cert-metadata.sh < config.cfg"
 
-# Prompt the user for the Intermediate CA name
-echo -n "
-Enter the name for an Intermediate CA (This is required for Certificate Enrollment) eg. intermediate-ca-01: "
-read -r intermediate_ca_name
+# Prompt for Intermediate CA name with validation
+while true; do
+  echo -n "Enter the name for an Intermediate CA (This is required for Certificate Enrollment), e.g., intermediate-ca-01: "
+  read -r intermediate_ca_name
+  if [[ -n "$intermediate_ca_name" ]]; then
+    break
+  else
+    echo "Error: Please input a name for your Intermediate CA."
+  fi
+done
+
 
 # Run the makeCert.sh script in order to create an intermediate CA
 sudo su tak -c "cd /opt/tak/certs && ./makeCert.sh ca '$intermediate_ca_name' -y < cert-metadata.sh < config.cfg"
