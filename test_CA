@@ -1,0 +1,132 @@
+#!/bin/bash
+# PKI Infrastructure Setup for Proxmox Server
+
+# Create directory structure
+mkdir -p /etc/ssl/rootca/{root,intermediates/{OPKBTN,firewall}/{certs,crl,newcerts,private}}
+chmod -R 700 /etc/ssl/rootca
+
+# Root CA Configuration
+cat > /etc/ssl/rootca/root-openssl.cnf << EOL
+[req]
+default_bits = 4096
+default_md = sha512
+default_keyfile = root-ca.key
+distinguished_name = root_ca_dn
+x509_extensions = root_ca_ext
+
+[root_ca_dn]
+countryName = Country Name (2 letter code)
+countryName_default = DK
+countryName_min = 2
+countryName_max = 2
+
+organizationName = Organization Name
+organizationName_default = OPKBTN
+
+commonName = Common Name
+commonName_default = Root CA
+
+[root_ca_ext]
+basicConstraints = critical, CA:TRUE, pathlen:2
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+EOL
+
+# OPKBTN Intermediate CA Configuration
+cat > /etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-openssl.cnf << EOL
+[req]
+default_bits = 4096
+default_md = sha512
+default_keyfile = OPKBTN-ca.key
+distinguished_name = OPKBTN_ca_dn
+x509_extensions = OPKBTN_ca_ext
+
+[OPKBTN_ca_dn]
+countryName = Country Name (2 letter code)
+countryName_default = DK
+countryName_min = 2
+countryName_max = 2
+
+organizationName = Organization Name
+organizationName_default = OPKBTN
+
+commonName = Common Name
+commonName_default = OPKBTN Intermediate CA
+
+[OPKBTN_ca_ext]
+basicConstraints = critical, CA:TRUE, pathlen:1
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+EOL
+
+# Server Certificate Generation Function
+generate_server_cert() {
+    local hostname=$1
+    local config_path="/etc/ssl/rootca/intermediates/OPKBTN/${hostname}-openssl.cnf"
+    local cert_dir="/etc/ssl/rootca/intermediates/OPKBTN/certs"
+    local key_dir="/etc/ssl/rootca/intermediates/OPKBTN/private"
+    
+    # Create configuration for specific server
+    cat > "$config_path" << EOL
+[req]
+default_bits = 4096
+default_md = sha512
+distinguished_name = server_dn
+req_extensions = server_ext
+
+[server_dn]
+commonName = ${hostname}
+
+[server_ext]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = critical, serverAuth
+subjectAltName = DNS:${hostname}
+EOL
+
+    # Generate private key
+    openssl genrsa -out "${key_dir}/${hostname}.key" 4096
+
+    # Generate CSR
+    openssl req -config "$config_path" \
+        -key "${key_dir}/${hostname}.key" \
+        -new -out "${cert_dir}/${hostname}.csr"
+
+    # Generate Certificate
+    openssl x509 -req -days 365 -sha512 \
+        -CA /etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-ca.crt \
+        -CAkey /etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-ca.key \
+        -CAcreateserial \
+        -in "${cert_dir}/${hostname}.csr" \
+        -out "${cert_dir}/${hostname}.crt"
+
+    # Special handling for tak.opkbtn.dk
+    if [ "$hostname" == "tak.opkbtn.dk" ]; then
+        # Generate PEM (concatenated key and cert)
+        cat "${key_dir}/${hostname}.key" "${cert_dir}/${hostname}.crt" > "${cert_dir}/${hostname}.pem"
+
+        # Generate PKCS12
+        openssl pkcs12 -export \
+            -out "${cert_dir}/${hostname}.p12" \
+            -inkey "${key_dir}/${hostname}.key" \
+            -in "${cert_dir}/${hostname}.crt" \
+            -passout pass:changeit
+
+        # Generate Java Keystore (JKS)
+        keytool -importcert -noprompt \
+            -alias "${hostname}" \
+            -file "${cert_dir}/${hostname}.crt" \
+            -keystore "${cert_dir}/${hostname}.jks" \
+            -storepass changeit
+    fi
+}
+
+# Generate certificates for your VMs
+generate_server_cert "npm.opkbtn.dk"
+generate_server_cert "dns.opkbtn.dk"
+generate_server_cert "tak.opkbtn.dk"
+generate_server_cert "100"
+
+echo "PKI Infrastructure Setup Complete"
