@@ -1,5 +1,11 @@
 #!/bin/bash
+
 # PKI Infrastructure Setup for Proxmox Server
+
+# Configuration Variables
+CERT_VALIDITY_DAYS=365
+WARN_BEFORE_EXPIRY=30
+HOSTNAMES=("tak.opkbtn.dk" "pve.opkbtn.dk" "dns.opkbtn.dk" "fw.opkbtn.dk" "npm.opkbtn.dk")
 
 # Create directory structure
 mkdir -p /etc/ssl/rootca/{root,intermediates/{OPKBTN,firewall}/{certs,crl,newcerts,private}}
@@ -19,10 +25,8 @@ countryName = Country Name (2 letter code)
 countryName_default = DK
 countryName_min = 2
 countryName_max = 2
-
 organizationName = Organization Name
 organizationName_default = OPKBTN
-
 commonName = Common Name
 commonName_default = Root CA
 
@@ -31,6 +35,7 @@ basicConstraints = critical, CA:TRUE, pathlen:2
 keyUsage = critical, digitalSignature, cRLSign, keyCertSign
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always
+crlDistributionPoints = URI:file:///etc/ssl/rootca/root-ca.crl
 EOL
 
 # OPKBTN Intermediate CA Configuration
@@ -47,10 +52,8 @@ countryName = Country Name (2 letter code)
 countryName_default = DK
 countryName_min = 2
 countryName_max = 2
-
 organizationName = Organization Name
 organizationName_default = OPKBTN
-
 commonName = Common Name
 commonName_default = OPKBTN Intermediate CA
 
@@ -59,7 +62,41 @@ basicConstraints = critical, CA:TRUE, pathlen:1
 keyUsage = critical, digitalSignature, cRLSign, keyCertSign
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always
+crlDistributionPoints = URI:file:///etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-ca.crl
 EOL
+
+# Certificate Expiration Warning Function
+check_cert_expiration() {
+    local cert_path=$1
+    local days_to_warn=$2
+    
+    if [ ! -f "$cert_path" ]; then
+        echo "Certificate not found: $cert_path"
+        return 1
+    fi
+    
+    local days_remaining=$(openssl x509 -enddate -noout -in "$cert_path" | cut -d= -f2 | xargs -I {} date -d "{}" +%s | xargs -I {} bash -c 'echo $(( ($(date -d "{}" +%s) - $(date +%s) ) / 86400 ))')
+    
+    if [ "$days_remaining" -le "$days_to_warn" ]; then
+        echo "WARNING: Certificate $cert_path expires in $days_remaining days!"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Generate Certificate Revocation List (CRL) Function
+generate_crl() {
+    local ca_key=$1
+    local ca_cert=$2
+    local crl_path=$3
+    
+    openssl ca -gencrl \
+        -keyfile "$ca_key" \
+        -cert "$ca_cert" \
+        -out "$crl_path" \
+        -config /etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-openssl.cnf
+}
 
 # Server Certificate Generation Function
 generate_server_cert() {
@@ -83,37 +120,37 @@ commonName = ${hostname}
 basicConstraints = critical, CA:FALSE
 keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = critical, serverAuth
-subjectAltName = DNS:${hostname}
+subjectAltName = DNS:${hostname},DNS:*.${hostname}
 EOL
 
     # Generate private key
     openssl genrsa -out "${key_dir}/${hostname}.key" 4096
-
+    
     # Generate CSR
     openssl req -config "$config_path" \
         -key "${key_dir}/${hostname}.key" \
         -new -out "${cert_dir}/${hostname}.csr"
-
+    
     # Generate Certificate
-    openssl x509 -req -days 365 -sha512 \
+    openssl x509 -req -days "$CERT_VALIDITY_DAYS" -sha512 \
         -CA /etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-ca.crt \
         -CAkey /etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-ca.key \
         -CAcreateserial \
         -in "${cert_dir}/${hostname}.csr" \
         -out "${cert_dir}/${hostname}.crt"
-
-    # Special handling for tak.opkbtn.dk
+    
+    # Special handling for specific hostnames
     if [ "$hostname" == "tak.opkbtn.dk" ]; then
         # Generate PEM (concatenated key and cert)
         cat "${key_dir}/${hostname}.key" "${cert_dir}/${hostname}.crt" > "${cert_dir}/${hostname}.pem"
-
+        
         # Generate PKCS12
         openssl pkcs12 -export \
             -out "${cert_dir}/${hostname}.p12" \
             -inkey "${key_dir}/${hostname}.key" \
             -in "${cert_dir}/${hostname}.crt" \
             -passout pass:changeit
-
+        
         # Generate Java Keystore (JKS)
         keytool -importcert -noprompt \
             -alias "${hostname}" \
@@ -123,10 +160,22 @@ EOL
     fi
 }
 
-# Generate certificates for your VMs
-generate_server_cert "npm.opkbtn.dk"
-generate_server_cert "dns.opkbtn.dk"
-generate_server_cert "tak.opkbtn.dk"
-generate_server_cert "100"
+# Main Execution
+# Generate Root CA CRL
+generate_crl "/etc/ssl/rootca/root-ca.key" "/etc/ssl/rootca/root-ca.crt" "/etc/ssl/rootca/root-ca.crl"
+
+# Generate Intermediate CA CRL
+generate_crl "/etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-ca.key" "/etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-ca.crt" "/etc/ssl/rootca/intermediates/OPKBTN/OPKBTN-ca.crl"
+
+# Generate server certificates
+for hostname in "${HOSTNAMES[@]}"; do
+    generate_server_cert "$hostname"
+done
+
+# Check certificate expirations
+echo "Checking Certificate Expirations:"
+for hostname in "${HOSTNAMES[@]}"; do
+    check_cert_expiration "/etc/ssl/rootca/intermediates/OPKBTN/certs/${hostname}.crt" "$WARN_BEFORE_EXPIRY"
+done
 
 echo "PKI Infrastructure Setup Complete"
