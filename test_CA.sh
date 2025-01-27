@@ -165,7 +165,7 @@ check_cert_expiration() {
     
     if [ ! -f "$cert_path" ]; then
         error_exit "Certificate not found: $cert_path"
-    }
+    fi
     
     local expiry_date
     expiry_date=$(openssl x509 -enddate -noout -in "$cert_path" | cut -d= -f2)
@@ -190,24 +190,45 @@ generate_crl() {
     local use_password=${5:-false}
     local password=${6:-""}
     
+    # Debug information
+    echo "Generating CRL..."
+    echo "Using CA certificate: $ca_cert"
+    echo "Using config file: $config_file"
+    
+    # Check if files exist
+    [ ! -f "$ca_key" ] && echo "Error: CA key not found: $ca_key" && return 1
+    [ ! -f "$ca_cert" ] && echo "Error: CA certificate not found: $ca_cert" && return 1
+    [ ! -f "$config_file" ] && echo "Error: Config file not found: $config_file" && return 1
+    
+    # Ensure directory exists for CRL
+    mkdir -p "$(dirname "$crl_path")"
+    
+    # Set proper permissions
+    chmod 700 "$(dirname "$crl_path")"
+    
     if [ "$use_password" = true ] && [ -n "$password" ]; then
         openssl ca -gencrl \
             -keyfile "$ca_key" \
             -cert "$ca_cert" \
             -out "$crl_path" \
             -config "$config_file" \
-            -passin pass:"$password" || \
+            -passin pass:"$password" \
+            -verbose || \
             error_exit "Failed to generate CRL for $ca_cert"
     else
         openssl ca -gencrl \
             -keyfile "$ca_key" \
             -cert "$ca_cert" \
             -out "$crl_path" \
-            -config "$config_file" || \
+            -config "$config_file" \
+            -verbose || \
             error_exit "Failed to generate CRL for $ca_cert"
     fi
     
+    # Set CRL permissions
     chmod 644 "$crl_path"
+    
+    echo "CRL generated successfully at $crl_path"
 }
 
 # Server Certificate Generation Function
