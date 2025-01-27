@@ -163,7 +163,7 @@ check_cert_expiration() {
     
     if [ ! -f "$cert_path" ]; then
         error_exit "Certificate not found: $cert_path"
-    }
+    fi
     
     local expiry_date
     expiry_date=$(openssl x509 -enddate -noout -in "$cert_path" | cut -d= -f2)
