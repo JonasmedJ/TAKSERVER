@@ -22,8 +22,48 @@ mkdir -p "${ROOT_CA_DIR}"/{root,intermediates/{OPKBTN,firewall}/{certs,crl,newce
     error_exit "Failed to create directory structure"
 chmod -R 700 "${ROOT_CA_DIR}" || error_exit "Failed to set directory permissions"
 
+# Initialize CA database files
+touch "${ROOT_CA_DIR}/index.txt"
+echo "01" > "${ROOT_CA_DIR}/serial"
+echo "01" > "${ROOT_CA_DIR}/crlnumber"
+
+touch "${INTERMEDIATE_CA_DIR}/index.txt"
+echo "01" > "${INTERMEDIATE_CA_DIR}/serial"
+echo "01" > "${INTERMEDIATE_CA_DIR}/crlnumber"
+
 # Root CA Configuration
-cat > "${ROOT_CA_DIR}/root-openssl.cnf" << EOL
+cat > "${ROOT_CA_DIR}/root-openssl.cnf" << 'EOL'
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+dir               = /etc/ssl/rootca
+certs             = $dir/certs
+crl_dir           = $dir/crl
+new_certs_dir     = $dir/newcerts
+database          = $dir/index.txt
+serial            = $dir/serial
+RANDFILE          = $dir/private/.rand
+private_key       = $dir/root-ca.key
+certificate       = $dir/root-ca.crt
+crlnumber         = $dir/crlnumber
+crl               = $dir/root-ca.crl
+crl_extensions    = crl_ext
+default_md        = sha512
+preserve          = no
+policy            = policy_strict
+
+[policy_strict]
+countryName             = match
+stateOrProvinceName     = optional
+organizationName        = match
+organizationalUnitName  = optional
+commonName             = supplied
+emailAddress           = optional
+
+[crl_ext]
+authorityKeyIdentifier=keyid:always
+
 [req]
 default_bits = 4096
 default_md = sha512
@@ -46,7 +86,38 @@ crlDistributionPoints = URI:file:///etc/ssl/rootca/root-ca.crl
 EOL
 
 # OPKBTN Intermediate CA Configuration
-cat > "${INTERMEDIATE_CA_DIR}/OPKBTN-openssl.cnf" << EOL
+cat > "${INTERMEDIATE_CA_DIR}/OPKBTN-openssl.cnf" << 'EOL'
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+dir               = /etc/ssl/rootca/intermediates/OPKBTN
+certs             = $dir/certs
+crl_dir           = $dir/crl
+new_certs_dir     = $dir/newcerts
+database          = $dir/index.txt
+serial            = $dir/serial
+RANDFILE          = $dir/private/.rand
+private_key       = $dir/OPKBTN-ca.key
+certificate       = $dir/OPKBTN-ca.crt
+crlnumber         = $dir/crlnumber
+crl               = $dir/OPKBTN-ca.crl
+crl_extensions    = crl_ext
+default_md        = sha512
+preserve          = no
+policy            = policy_strict
+
+[policy_strict]
+countryName             = match
+stateOrProvinceName     = optional
+organizationName        = match
+organizationalUnitName  = optional
+commonName             = supplied
+emailAddress           = optional
+
+[crl_ext]
+authorityKeyIdentifier=keyid:always
+
 [req]
 default_bits = 4096
 default_md = sha512
