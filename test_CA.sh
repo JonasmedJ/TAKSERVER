@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # PKI Infrastructure Setup for Proxmox Server with Multiple Intermediate CAs
-
 set -euo pipefail # Exit on error, undefined var, or pipe failure
 
 # Configuration Variables
@@ -13,6 +12,9 @@ ROOT_CA_DIR="/etc/ssl/Root-CA01"
 FIREWALL_HOSTS=("fw.opkbtn.dk")
 SERVICE_HOSTS=("pve.opkbtn.dk" "dns.opkbtn.dk" "npm.opkbtn.dk" "ldaps.opkbtn.dk")
 TAK_HOSTS=("tak.opkbtn.dk")
+
+# Password for TAK intermediate CA
+TAK_CA_PASSWORD="your-secure-password-here"  # Change this to your desired password
 
 # Intermediate CA directories
 FIREWALL_CA_DIR="${ROOT_CA_DIR}/intermediates/Firewall-CA"
@@ -38,7 +40,7 @@ for CA_DIR in "${ROOT_CA_DIR}" "${FIREWALL_CA_DIR}" "${SERVICES_CA_DIR}" "${TAK_
 done
 
 # Root CA Configuration
-cat > "${ROOT_CA_DIR}/root-openssl.cnf" << 'EOL'
+cat > "${ROOT_CA_DIR}/Root-CA01-openssl.cnf" << 'EOL'
 [ ca ]
 default_ca = CA_default
 
@@ -50,10 +52,10 @@ new_certs_dir     = $dir/newcerts
 database          = $dir/index.txt
 serial            = $dir/serial
 RANDFILE          = $dir/private/.rand
-private_key       = $dir/root-ca.key
-certificate       = $dir/root-ca.crt
+private_key       = $dir/Root-CA01.key
+certificate       = $dir/Root-CA01.crt
 crlnumber         = $dir/crlnumber
-crl               = $dir/root-ca.crl
+crl               = $dir/Root-CA01.crl
 crl_extensions    = crl_ext
 default_md        = sha512
 preserve          = no
@@ -73,22 +75,22 @@ authorityKeyIdentifier=keyid:always
 [req]
 default_bits = 4096
 default_md = sha512
-default_keyfile = root-ca.key
-distinguished_name = root_ca_dn
-x509_extensions = root_ca_ext
+default_keyfile = Root-CA01.key
+distinguished_name = Root_CA01_dn
+x509_extensions = Root_CA01_ext
 prompt = no
 
-[root_ca_dn]
+[Root_CA01_dn]
 countryName = DK
 organizationName = OPKBTN
 commonName = Root-CA01
 
-[root_ca_ext]
+[Root_CA01_ext]
 basicConstraints = critical, CA:TRUE, pathlen:2
 keyUsage = critical, digitalSignature, cRLSign, keyCertSign
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always
-crlDistributionPoints = URI:file:///etc/ssl/Root-CA01/root-ca.crl
+crlDistributionPoints = URI:file:///etc/ssl/Root-CA01/Root-CA01.crl
 EOL
 
 # Function to generate intermediate CA configuration
@@ -163,7 +165,7 @@ check_cert_expiration() {
     
     if [ ! -f "$cert_path" ]; then
         error_exit "Certificate not found: $cert_path"
-    fi
+    }
     
     local expiry_date
     expiry_date=$(openssl x509 -enddate -noout -in "$cert_path" | cut -d= -f2)
@@ -185,14 +187,26 @@ generate_crl() {
     local ca_cert=$2
     local crl_path=$3
     local config_file=$4
+    local use_password=${5:-false}
+    local password=${6:-""}
     
-    openssl ca -gencrl \
-        -keyfile "$ca_key" \
-        -cert "$ca_cert" \
-        -out "$crl_path" \
-        -config "$config_file" || \
-        error_exit "Failed to generate CRL for $ca_cert"
-        
+    if [ "$use_password" = true ] && [ -n "$password" ]; then
+        openssl ca -gencrl \
+            -keyfile "$ca_key" \
+            -cert "$ca_cert" \
+            -out "$crl_path" \
+            -config "$config_file" \
+            -passin pass:"$password" || \
+            error_exit "Failed to generate CRL for $ca_cert"
+    else
+        openssl ca -gencrl \
+            -keyfile "$ca_key" \
+            -cert "$ca_cert" \
+            -out "$crl_path" \
+            -config "$config_file" || \
+            error_exit "Failed to generate CRL for $ca_cert"
+    fi
+    
     chmod 644 "$crl_path"
 }
 
@@ -201,6 +215,8 @@ generate_server_cert() {
     local hostname=$1
     local ca_dir=$2
     local ca_name=$3
+    local use_password=${4:-false}
+    local password=${5:-""}
     local config_path="${ca_dir}/${hostname}-openssl.cnf"
     local cert_dir="${ca_dir}/certs"
     local key_dir="${ca_dir}/private"
@@ -234,14 +250,28 @@ EOL
         -new -out "${cert_dir}/${hostname}.csr"
     
     # Generate Certificate
-    openssl x509 -req -days "$CERT_VALIDITY_DAYS" -sha512 \
-        -CA "${ca_dir}/${ca_name}-ca.crt" \
-        -CAkey "${ca_dir}/${ca_name}-ca.key" \
-        -CAcreateserial \
-        -in "${cert_dir}/${hostname}.csr" \
-        -out "${cert_dir}/${hostname}.crt" \
-        -extfile "$config_path" \
-        -extensions server_ext
+    if [ "$use_password" = true ] && [ -n "$password" ]; then
+        openssl x509 -req -days "$CERT_VALIDITY_DAYS" -sha512 \
+            -CA "${ca_dir}/${ca_name}-ca.crt" \
+            -CAkey "${ca_dir}/${ca_name}-ca.key" \
+            -passin pass:"$password" \
+            -CAcreateserial \
+            -in "${cert_dir}/${hostname}.csr" \
+            -out "${cert_dir}/${hostname}.crt" \
+            -extfile "$config_path" \
+            -extensions server_ext || \
+            error_exit "Failed to generate certificate for ${hostname}"
+    else
+        openssl x509 -req -days "$CERT_VALIDITY_DAYS" -sha512 \
+            -CA "${ca_dir}/${ca_name}-ca.crt" \
+            -CAkey "${ca_dir}/${ca_name}-ca.key" \
+            -CAcreateserial \
+            -in "${cert_dir}/${hostname}.csr" \
+            -out "${cert_dir}/${hostname}.crt" \
+            -extfile "$config_path" \
+            -extensions server_ext || \
+            error_exit "Failed to generate certificate for ${hostname}"
+    fi
     
     chmod 644 "${cert_dir}/${hostname}.crt"
     
@@ -257,7 +287,8 @@ EOL
             -out "${cert_dir}/${hostname}.p12" \
             -inkey "${key_dir}/${hostname}.key" \
             -in "${cert_dir}/${hostname}.crt" \
-            -passout pass:changeit
+            -passout pass:changeit || \
+            error_exit "Failed to generate PKCS12 for ${hostname}"
         chmod 400 "${cert_dir}/${hostname}.p12"
         
         # Generate Java Keystore
@@ -265,7 +296,8 @@ EOL
             -alias "${hostname}" \
             -file "${cert_dir}/${hostname}.crt" \
             -keystore "${cert_dir}/${hostname}.jks" \
-            -storepass changeit
+            -storepass changeit || \
+            error_exit "Failed to generate JKS for ${hostname}"
         chmod 400 "${cert_dir}/${hostname}.jks"
     fi
 }
@@ -274,83 +306,108 @@ EOL
 generate_intermediate_ca() {
     local ca_dir=$1
     local ca_name=$2
+    local use_password=${3:-false}
+    local password=${4:-""}
     
     if [ ! -f "${ca_dir}/${ca_name}-ca.key" ]; then
-        openssl genrsa -out "${ca_dir}/${ca_name}-ca.key" 4096
+        # Generate private key with or without password
+        if [ "$use_password" = true ] && [ -n "$password" ]; then
+            # Generate encrypted private key
+            openssl genrsa -aes256 -passout pass:"$password" \
+                -out "${ca_dir}/${ca_name}-ca.key" 4096 || \
+                error_exit "Failed to generate encrypted private key for ${ca_name}"
+        else
+            # Generate unencrypted private key
+            openssl genrsa -out "${ca_dir}/${ca_name}-ca.key" 4096 || \
+                error_exit "Failed to generate private key for ${ca_name}"
+        fi
         chmod 400 "${ca_dir}/${ca_name}-ca.key"
         
-        openssl req -config "${ca_dir}/${ca_name}-openssl.cnf" \
-            -key "${ca_dir}/${ca_name}-ca.key" \
-            -new -out "${ca_dir}/${ca_name}-ca.csr"
+        # Generate CSR (handle password if present)
+        if [ "$use_password" = true ] && [ -n "$password" ]; then
+            openssl req -config "${ca_dir}/${ca_name}-openssl.cnf" \
+                -key "${ca_dir}/${ca_name}-ca.key" \
+                -passin pass:"$password" \
+                -new -out "${ca_dir}/${ca_name}-ca.csr" || \
+                error_exit "Failed to generate CSR for ${ca_name}"
+        else
+            openssl req -config "${ca_dir}/${ca_name}-openssl.cnf" \
+                -key "${ca_dir}/${ca_name}-ca.key" \
+                -new -out "${ca_dir}/${ca_name}-ca.csr" || \
+                error_exit "Failed to generate CSR for ${ca_name}"
+        fi
         
+        # Sign the intermediate CA with Root CA
         openssl x509 -req -days $CERT_VALIDITY_DAYS -sha512 \
-            -CA "${ROOT_CA_DIR}/root-ca.crt" \
-            -CAkey "${ROOT_CA_DIR}/root-ca.key" \
+            -CA "${ROOT_CA_DIR}/Root-CA01.crt" \
+            -CAkey "${ROOT_CA_DIR}/Root-CA01.key" \
             -CAcreateserial \
             -in "${ca_dir}/${ca_name}-ca.csr" \
             -out "${ca_dir}/${ca_name}-ca.crt" \
             -extensions "${ca_name}_ca_ext" \
-            -extfile "${ca_dir}/${ca_name}-openssl.cnf"
+            -extfile "${ca_dir}/${ca_name}-openssl.cnf" || \
+            error_exit "Failed to sign ${ca_name} certificate"
         chmod 644 "${ca_dir}/${ca_name}-ca.crt"
     fi
 }
 
 # Generate Root CA
-if [ ! -f "${ROOT_CA_DIR}/root-ca.key" ]; then
-    openssl genrsa -out "${ROOT_CA_DIR}/root-ca.key" 4096
-    chmod 400 "${ROOT_CA_DIR}/root-ca.key"
+if [ ! -f "${ROOT_CA_DIR}/Root-CA01.key" ]; then
+    openssl genrsa -out "${ROOT_CA_DIR}/Root-CA01.key" 4096
+    chmod 400 "${ROOT_CA_DIR}/Root-CA01.key"
     
-    openssl req -config "${ROOT_CA_DIR}/root-openssl.cnf" \
-        -key "${ROOT_CA_DIR}/root-ca.key" \
+    openssl req -config "${ROOT_CA_DIR}/Root-CA01-openssl.cnf" \
+        -key "${ROOT_CA_DIR}/Root-CA01.key" \
         -new -x509 -days $((CERT_VALIDITY_DAYS * 2)) \
-        -out "${ROOT_CA_DIR}/root-ca.crt"
-    chmod 644 "${ROOT_CA_DIR}/root-ca.crt"
+        -out "${ROOT_CA_DIR}/Root-CA01.crt"
+    chmod 644 "${ROOT_CA_DIR}/Root-CA01.crt"
 fi
 
 # Generate Intermediate CAs
-generate_intermediate_ca "${FIREWALL_CA_DIR}" "Firewall"
-generate_intermediate_ca "${SERVICES_CA_DIR}" "Services"
-generate_intermediate_ca "${TAK_CA_DIR}" "TAK"
+generate_intermediate_ca "${FIREWALL_CA_DIR}" "Firewall" false
+generate_intermediate_ca "${SERVICES_CA_DIR}" "Services" false
+generate_intermediate_ca "${TAK_CA_DIR}" "TAK" true "$TAK_CA_PASSWORD"
 
 # Generate CRLs
 generate_crl \
-    "${ROOT_CA_DIR}/root-ca.key" \
-    "${ROOT_CA_DIR}/root-ca.crt" \
-    "${ROOT_CA_DIR}/root-ca.crl" \
-    "${ROOT_CA_DIR}/root-openssl.cnf"
+    "${ROOT_CA_DIR}/Root-CA01.key" \
+    "${ROOT_CA_DIR}/Root-CA01.crt" \
+    "${ROOT_CA_DIR}/Root-CA01.crl" \
+    "${ROOT_CA_DIR}/Root-CA01-openssl.cnf"
 
-for CA_INFO in "Firewall:${FIREWALL_CA_DIR}" "Services:${SERVICES_CA_DIR}" "TAK:${TAK_CA_DIR}"; do
-    IFS=':' read -r ca_name ca_dir <<< "${CA_INFO}"
-    generate_crl \
-        "${ca_dir}/${ca_name}-ca.key" \
-        "${ca_dir}/${ca_name}-ca.crt" \
-        "${ca_dir}/${ca_name}-ca.crl" \
-        "${ca_dir}/${ca_name}-openssl.cnf"
-done
+# Generate CRLs for intermediate CAs
+generate_crl \
+    "${FIREWALL_CA_DIR}/Firewall-ca.key" \
+    "${FIREWALL_CA_DIR}/Firewall-ca.crt" \
+    "${FIREWALL_CA_DIR}/Firewall-ca.crl" \
+    "${FIREWALL_CA_DIR}/Firewall-openssl.cnf" false
+
+generate_crl \
+    "${SERVICES_CA_DIR}/Services-ca.key" \
+    "${SERVICES_CA_DIR}/Services-ca.crt" \
+    "${SERVICES_CA_DIR}/Services-ca.crl" \
+    "${SERVICES_CA_DIR}/Services-openssl.cnf" false
+
+generate_crl \
+    "${TAK_CA_DIR}/TAK-ca.key" \
+    "${TAK_CA_DIR}/TAK-ca.crt" \
+    "${TAK_CA_DIR}/TAK-ca.crl" \
+    "${TAK_CA_DIR}/TAK-openssl.cnf" true "$TAK_CA_PASSWORD"
 
 # Generate server certificates for each intermediate CA
 echo "Generating Firewall certificates..."
 for hostname in "${FIREWALL_HOSTS[@]}"; do
-    generate_server_cert "$hostname" "${FIREWALL_CA_DIR}" "Firewall"
+    generate_server_cert "$hostname" "${FIREWALL_CA_DIR}" "Firewall" false
 done
 
 echo "Generating Service certificates..."
 for hostname in "${SERVICE_HOSTS[@]}"; do
-    generate_server_cert "$hostname" "${SERVICES_CA_DIR}" "Services"
+    generate_server_cert "$hostname" "${SERVICES_CA_DIR}" "Services" false
 done
 
 echo "Generating TAK certificates..."
 for hostname in "${TAK_HOSTS[@]}"; do
-    generate_server_cert "$hostname" "${TAK_CA_DIR}" "TAK"
-done
-
-# Check certificate expirations
-echo "Checking Certificate Expirations:"
-for CA_INFO in "Firewall:${FIREWALL_CA_DIR}:${FIREWALL_HOSTS[*]}" "Services:${SERVICES_CA_DIR}:${SERVICE_HOSTS[*]}" "TAK:${TAK_CA_DIR}:${TAK_HOSTS[*]}"; do
-    IFS=':' read -r ca_name ca_dir hosts <<< "${CA_INFO}"
-    for hostname in ${hosts}; do
-        check_cert_expiration "${ca_dir}/certs/${hostname}.crt" "$WARN_BEFORE_EXPIRY"
-    done
+    generate_server_cert "$hostname" "${TAK_CA_DIR}" "TAK" true "$TAK_CA_PASSWORD"
 done
 
 echo "PKI Infrastructure Setup Complete"
