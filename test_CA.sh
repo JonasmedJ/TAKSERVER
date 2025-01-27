@@ -206,6 +206,7 @@ generate_crl() {
     # Set proper permissions
     chmod 700 "$(dirname "$crl_path")"
     
+    # Create empty CRL if database is empty
     if [ "$use_password" = true ] && [ -n "$password" ]; then
         openssl ca -gencrl \
             -keyfile "$ca_key" \
@@ -213,6 +214,7 @@ generate_crl() {
             -out "$crl_path" \
             -config "$config_file" \
             -passin pass:"$password" \
+            -crldays 365 \
             -verbose || \
             error_exit "Failed to generate CRL for $ca_cert"
     else
@@ -221,6 +223,7 @@ generate_crl() {
             -cert "$ca_cert" \
             -out "$crl_path" \
             -config "$config_file" \
+            -crldays 365 \
             -verbose || \
             error_exit "Failed to generate CRL for $ca_cert"
     fi
