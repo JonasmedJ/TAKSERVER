@@ -196,13 +196,6 @@ generate_intermediate_ca "${FIREWALL_CA_DIR}" "Firewall" false
 generate_intermediate_ca "${SERVICES_CA_DIR}" "Services" false
 generate_intermediate_ca "${TAK_CA_DIR}" "TAK" true "$TAK_CA_PASSWORD"
 
-# Generate CRLs
-generate_crl \
-    "${ROOT_CA_DIR}/Root-CA01.key" \
-    "${ROOT_CA_DIR}/Root-CA01.crt" \
-    "${ROOT_CA_DIR}/Root-CA01.crl" \
-    "${ROOT_CA_DIR}/Root-CA01-openssl.cnf"
-
 # Generate CRLs for intermediate CAs
 generate_crl \
     "${FIREWALL_CA_DIR}/Firewall-ca.key" \
@@ -210,6 +203,7 @@ generate_crl \
     "${FIREWALL_CA_DIR}/Firewall-ca.crl" \
     "${FIREWALL_CA_DIR}/Firewall-openssl.cnf" false
 
+# Change "Services" to match the case used in configuration
 generate_crl \
     "${SERVICES_CA_DIR}/Services-ca.key" \
     "${SERVICES_CA_DIR}/Services-ca.crt" \
