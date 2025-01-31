@@ -312,31 +312,41 @@ EOL
     # Extract public key
     extract_public_key "${cert_dir}/${hostname}.crt" "${cert_dir}/${hostname}.pub"
     
-    # Special handling for TAK server
-    if [ "$hostname" == "tak.opkbtn.dk" ]; then
-        # Generate PEM
-        cat "${key_dir}/${hostname}.key" "${cert_dir}/${hostname}.crt" > \
-            "${cert_dir}/${hostname}.pem"
-        chmod 400 "${cert_dir}/${hostname}.pem"
-        
-        # Generate PKCS12
-        openssl pkcs12 -export \
-            -out "${cert_dir}/${hostname}.p12" \
-            -inkey "${key_dir}/${hostname}.key" \
-            -in "${cert_dir}/${hostname}.crt" \
-            -passout pass:changeit || \
-            error_exit "Failed to generate PKCS12 for ${hostname}"
-        chmod 400 "${cert_dir}/${hostname}.p12"
-        
-        # Generate Java Keystore
-        keytool -importcert -noprompt \
-            -alias "${hostname}" \
-            -file "${cert_dir}/${hostname}.crt" \
-            -keystore "${cert_dir}/${hostname}.jks" \
-            -storepass changeit || \
-            error_exit "Failed to generate JKS for ${hostname}"
-        chmod 400 "${cert_dir}/${hostname}.jks"
-    fi
+if [ "$hostname" == "tak.opkbtn.dk" ]; then
+    # Generate PEM
+    cat "${key_dir}/${hostname}.key" "${cert_dir}/${hostname}.crt" > \
+        "${cert_dir}/${hostname}.pem"
+    chmod 400 "${cert_dir}/${hostname}.pem"
+    
+    # Create full chain PEM
+    cat > "${cert_dir}/${hostname}-chain.pem" <<EOF
+$(cat "${cert_dir}/${hostname}.crt")
+$(cat "${TAK_CA_DIR}/TAK-ca.crt")
+$(cat "${ROOT_CA_DIR}/Root-CA01.crt")
+EOF
+    
+    # Generate PKCS12 with full chain
+    openssl pkcs12 -export \
+        -out "${cert_dir}/${hostname}.p12" \
+        -inkey "${key_dir}/${hostname}.key" \
+        -in "${cert_dir}/${hostname}.crt" \
+        -certfile "${cert_dir}/${hostname}-chain.pem" \
+        -passout pass:changeit || \
+        error_exit "Failed to generate PKCS12 for ${hostname}"
+    chmod 400 "${cert_dir}/${hostname}.p12"
+    
+    # Generate Java Keystore from PKCS12
+    keytool -importkeystore \
+        -srckeystore "${cert_dir}/${hostname}.p12" \
+        -srcstoretype PKCS12 \
+        -srcstorepass changeit \
+        -destkeystore "${cert_dir}/${hostname}.jks" \
+        -deststoretype JKS \
+        -deststorepass changeit || \
+        error_exit "Failed to generate JKS for ${hostname}"
+    chmod 400 "${cert_dir}/${hostname}.jks"
+fi
+
 }
 
 # Function to generate intermediate CA - Modified to include public key extraction
