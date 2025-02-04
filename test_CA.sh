@@ -189,28 +189,10 @@ crlDistributionPoints = URI:file://${ca_dir}/${ca_name}-ca.crl
 EOL
 }
 
-# Certificate Expiration Warning Function
-check_cert_expiration() {
-    local cert_path=$1
-    local days_to_warn=$2
-    
-    if [ ! -f "$cert_path" ]; then
-        error_exit "Certificate not found: $cert_path"
-    fi
-    
-    local expiry_date
-    expiry_date=$(openssl x509 -enddate -noout -in "$cert_path" | cut -d= -f2)
-    
-    local days_remaining
-    days_remaining=$(date -d "$expiry_date" +%s | xargs -I {} bash -c "echo \$(( ({} - \$(date +%s)) / 86400 ))")
-    
-    if [ "$days_remaining" -le "$days_to_warn" ]; then
-        echo "WARNING: Certificate $cert_path expires in $days_remaining days!"
-        return 0
-    fi
-    
-    return 1
-}
+generate_intermediate_ca_config "Firewall" "${FIREWALL_CA_DIR}" "Firewall Intermediate CA"
+generate_intermediate_ca_config "Services" "${SERVICES_CA_DIR}" "Services Intermediate CA"
+generate_intermediate_ca_config "TAK" "${TAK_CA_DIR}" "TAK Intermediate CA"
+
 
 # Generate Certificate Revocation List (CRL) Function
 generate_crl() {
