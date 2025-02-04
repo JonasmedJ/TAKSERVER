@@ -4,7 +4,7 @@
 set -euo pipefail # Exit on error, undefined var, or pipe failure
 
 # Configuration Variables
-CERT_VALIDITY_DAYS=365
+CERT_VALIDITY_DAYS=730
 WARN_BEFORE_EXPIRY=30
 ROOT_CA_DIR="/etc/ssl/Root-CA01"
 
@@ -38,58 +38,35 @@ extract_public_key() {
     echo "Public key extracted to $output_path"
 }
 
-# Function to generate truststores for TAK CA and certificates
-generate_truststores() {
-    local ca_dir=$1
-    local ca_name=$2
-    local password=${3:-"changeit"}
-    
-    echo "Generating truststores for ${ca_name}..."
-    
-    # Create a trusted certificate version with client/server auth
-    openssl x509 -in "${ca_dir}/${ca_name}-ca.crt" \
-        -addtrust clientAuth \
-        -addtrust serverAuth \
-        -setalias "${ca_name}" \
-        -out "${ca_dir}/${ca_name}-trusted.pem"
-    
-    # Create temporary chain file
-    cat > "${ca_dir}/${ca_name}-full.pem" <<EOF
-$(cat "${ca_dir}/${ca_name}-ca.crt")
-$(cat "${ROOT_CA_DIR}/Root-CA01.crt")
-EOF
-    
-    # Generate PKCS12 truststore with full chain
-    openssl pkcs12 -export \
-        -in "${ca_dir}/${ca_name}-full.pem" \
-        -out "${ca_dir}/truststore-${ca_name}.p12" \
-        -nokeys \
-        -caname "${ca_name}" \
-        -passout pass:"${password}"
-    
-    # Generate JKS truststore with full chain
-    keytool -import -trustcacerts \
-        -file "${ca_dir}/${ca_name}-full.pem" \
-        -keystore "${ca_dir}/truststore-${ca_name}.jks" \
-        -alias "${ca_name}" \
-        -storepass "${password}" \
-        -noprompt
-    
-    # Cleanup
-    rm "${ca_dir}/${ca_name}-full.pem"
-    
-    # Set permissions
-    chmod 644 "${ca_dir}/${ca_name}-trusted.pem"
-    chmod 644 "${ca_dir}/truststore-${ca_name}.p12"
-    chmod 644 "${ca_dir}/truststore-${ca_name}.jks"
-    
-    echo "Truststores generated successfully for ${ca_name}"
-}
-
 # Create directory structure
 mkdir -p "${ROOT_CA_DIR}"/{root,intermediates/{Firewall-CA,Services-CA,TAK-CA}/{certs,crl,newcerts,private}} || \
     error_exit "Failed to create directory structure"
 chmod -R 700 "${ROOT_CA_DIR}" || error_exit "Failed to set directory permissions"
+
+# Create installPEM.sh script
+cat > "${ROOT_CA_DIR}/installPEM.sh" << 'EOL'
+#!/bin/bash
+# Credit @Josh Blomberg
+# Usage ./installPEM.sh {file.pem} {PEMPassword} {KeyStoreName}
+
+PEM_FILE=$1
+PASSWORD=$2
+KEYSTORE=$3
+# number of certs in the PEM file
+CERTS=$(grep 'END CERTIFICATE' $PEM_FILE| wc -l)
+
+# For every cert in the PEM file, extract it and import into the JKS keystore
+# awk command: step 1, if line is in the desired cert, print the line
+# step 2, increment counter when last line of cert is found
+for N in $(seq 0 $((CERTS - 1))); do
+    ALIAS="${PEM_FILE%.*}-$N"
+    cat $PEM_FILE |
+    awk "n==$N {print}; /END CERTIFICATE/ {n++}" |
+    keytool -noprompt -import -trustcacerts -alias $ALIAS -keystore $KEYSTORE -storepass $PASSWORD
+done
+EOL
+
+chmod +x "${ROOT_CA_DIR}/installPEM.sh"
 
 # Initialize CA database files for root and all intermediate CAs
 for CA_DIR in "${ROOT_CA_DIR}" "${FIREWALL_CA_DIR}" "${SERVICES_CA_DIR}" "${TAK_CA_DIR}"; do
@@ -212,11 +189,6 @@ crlDistributionPoints = URI:file://${ca_dir}/${ca_name}-ca.crl
 EOL
 }
 
-# Generate configurations for all intermediate CAs
-generate_intermediate_ca_config "Firewall" "${FIREWALL_CA_DIR}" "Firewall Intermediate CA"
-generate_intermediate_ca_config "Services" "${SERVICES_CA_DIR}" "Services Intermediate CA"
-generate_intermediate_ca_config "TAK" "${TAK_CA_DIR}" "TAK Intermediate CA"
-
 # Certificate Expiration Warning Function
 check_cert_expiration() {
     local cert_path=$1
@@ -292,6 +264,7 @@ generate_crl() {
     
     echo "CRL generated successfully at $crl_path"
 }
+
 # Server Certificate Generation Function - Modified to include public key extraction
 generate_server_cert() {
     local hostname=$1
@@ -360,44 +333,54 @@ EOL
     # Extract public key
     extract_public_key "${cert_dir}/${hostname}.crt" "${cert_dir}/${hostname}.pub"
     
-if [ "$hostname" == "tak.opkbtn.dk" ]; then
-    # Generate PEM
-    cat "${key_dir}/${hostname}.key" "${cert_dir}/${hostname}.crt" > \
-        "${cert_dir}/${hostname}.pem"
-    chmod 400 "${cert_dir}/${hostname}.pem"
-    
-    # Create full chain PEM
-    cat > "${cert_dir}/${hostname}-chain.pem" <<EOF
+    if [ "$hostname" == "tak.opkbtn.dk" ]; then
+        # Generate PEM
+        cat "${key_dir}/${hostname}.key" "${cert_dir}/${hostname}.crt" > \
+            "${cert_dir}/${hostname}.pem"
+        chmod 400 "${cert_dir}/${hostname}.pem"
+        
+        # Create CA bundle for truststore
+        cat > "${cert_dir}/ca-bundle.pem" << EOF
+$(cat "${ROOT_CA_DIR}/Root-CA01.crt")
+$(cat "${TAK_CA_DIR}/TAK-ca.crt")
+$(cat "${SERVICES_CA_DIR}/Services-ca.crt")
+$(cat "${FIREWALL_CA_DIR}/Firewall-ca.crt")
+EOF
+        
+        # Create truststore using installPEM.sh
+        "${ROOT_CA_DIR}/installPEM.sh" "${cert_dir}/ca-bundle.pem" "atakatak" "${cert_dir}/takserver-truststore.jks"
+        
+        # Create full chain PEM
+        cat > "${cert_dir}/${hostname}-chain.pem" <<EOF
 $(cat "${cert_dir}/${hostname}.crt")
 $(cat "${TAK_CA_DIR}/TAK-ca.crt")
 $(cat "${ROOT_CA_DIR}/Root-CA01.crt")
 EOF
-    
-    # Generate PKCS12 with full chain
-    openssl pkcs12 -export \
-        -out "${cert_dir}/${hostname}.p12" \
-        -inkey "${key_dir}/${hostname}.key" \
-        -in "${cert_dir}/${hostname}.crt" \
-        -certfile "${cert_dir}/${hostname}-chain.pem" \
-        -passout pass:changeit || \
-        error_exit "Failed to generate PKCS12 for ${hostname}"
-    chmod 400 "${cert_dir}/${hostname}.p12"
-    
-    # Generate Java Keystore from PKCS12
-    keytool -importkeystore \
-        -srckeystore "${cert_dir}/${hostname}.p12" \
-        -srcstoretype PKCS12 \
-        -srcstorepass changeit \
-        -destkeystore "${cert_dir}/${hostname}.jks" \
-        -deststoretype JKS \
-        -deststorepass changeit || \
-        error_exit "Failed to generate JKS for ${hostname}"
-    chmod 400 "${cert_dir}/${hostname}.jks"
-fi
-
+        
+        # Generate PKCS12 with full chain
+        openssl pkcs12 -export \
+            -out "${cert_dir}/${hostname}.p12" \
+            -inkey "${key_dir}/${hostname}.key" \
+            -in "${cert_dir}/${hostname}.crt" \
+            -certfile "${cert_dir}/${hostname}-chain.pem" \
+            -passout pass:changeit || \
+            error_exit "Failed to generate PKCS12 for ${hostname}"
+        chmod 400 "${cert_dir}/${hostname}.p12"
+        
+        # Generate Java Keystore from PKCS12
+        keytool -importkeystore \
+            -srckeystore "${cert_dir}/${hostname}.p12" \
+            -srcstoretype PKCS12 \
+            -srcstorepass changeit \
+            -destkeystore "${cert_dir}/${hostname}.jks" \
+            -deststoretype JKS \
+            -deststorepass changeit || \
+            error_exit "Failed to generate JKS for ${hostname}"
+        chmod 400 "${cert_dir}/${hostname}.jks"
+    fi
 }
 
-# Function to generate intermediate CA - Modified to include public key extraction
+# Generate Intermediate CAs
 generate_intermediate_ca() {
     local ca_dir=$1
     local ca_name=$2
@@ -449,34 +432,27 @@ generate_intermediate_ca() {
     fi
 }
 
-# Generate Root CA
+# Generate Root CA if it doesn't exist
 if [ ! -f "${ROOT_CA_DIR}/Root-CA01.key" ]; then
     openssl genrsa -out "${ROOT_CA_DIR}/Root-CA01.key" 4096
     chmod 400 "${ROOT_CA_DIR}/Root-CA01.key"
     
     openssl req -config "${ROOT_CA_DIR}/Root-CA01-openssl.cnf" \
         -key "${ROOT_CA_DIR}/Root-CA01.key" \
-        -new -x509 -days 1095 \
+        -new -x509 -days $((CERT_VALIDITY_DAYS * 2)) \
         -out "${ROOT_CA_DIR}/Root-CA01.crt"
     chmod 644 "${ROOT_CA_DIR}/Root-CA01.crt"
     
+    # Extract public key for the root CA
     extract_public_key "${ROOT_CA_DIR}/Root-CA01.crt" "${ROOT_CA_DIR}/Root-CA01.pub"
 fi
 
 # Generate Intermediate CAs
 generate_intermediate_ca "${FIREWALL_CA_DIR}" "Firewall" false
 generate_intermediate_ca "${SERVICES_CA_DIR}" "Services" false
-
-# Generate TAK CA with truststores
 generate_intermediate_ca "${TAK_CA_DIR}" "TAK" true "$TAK_CA_PASSWORD"
 
-cat "${TAK_CA_DIR}/TAK-ca.key" "${TAK_CA_DIR}/TAK-ca.crt" > "${TAK_CA_DIR}/TAK-ca.pem"
-
-chmod 400 "${TAK_CA_DIR}/TAK-ca.pem"
-
-generate_truststores "${TAK_CA_DIR}" "TAK" "${TAK_CA_PASSWORD}"
-
-# Generate CRLs
+# Generate CRLs for intermediate CAs
 generate_crl \
     "${FIREWALL_CA_DIR}/Firewall-ca.key" \
     "${FIREWALL_CA_DIR}/Firewall-ca.crt" \
@@ -495,7 +471,7 @@ generate_crl \
     "${TAK_CA_DIR}/TAK-ca.crl" \
     "${TAK_CA_DIR}/TAK-openssl.cnf" true "$TAK_CA_PASSWORD"
 
-# Generate server certificates
+# Generate server certificates for each intermediate CA
 echo "Generating Firewall certificates..."
 for hostname in "${FIREWALL_HOSTS[@]}"; do
     generate_server_cert "$hostname" "${FIREWALL_CA_DIR}" "Firewall" false
@@ -506,29 +482,9 @@ for hostname in "${SERVICE_HOSTS[@]}"; do
     generate_server_cert "$hostname" "${SERVICES_CA_DIR}" "Services" false
 done
 
-# Generate TAK certificates with truststores
 echo "Generating TAK certificates..."
 for hostname in "${TAK_HOSTS[@]}"; do
     generate_server_cert "$hostname" "${TAK_CA_DIR}" "TAK" true "$TAK_CA_PASSWORD"
-    
-    # Generate truststores for TAK server certificates
-    cert_dir="${TAK_CA_DIR}/certs"
-    openssl pkcs12 -export \
-        -out "${cert_dir}/truststore-${hostname}.p12" \
-        -inkey "${TAK_CA_DIR}/private/${hostname}.key" \
-        -in "${cert_dir}/${hostname}.crt" \
-        -certfile "${cert_dir}/${hostname}-chain.pem" \
-        -passout pass:"${TAK_CA_PASSWORD}"
-    
-    keytool -import -trustcacerts \
-        -file "${cert_dir}/${hostname}-chain.pem" \
-        -keystore "${cert_dir}/truststore-${hostname}.jks" \
-        -alias "${hostname}" \
-        -storepass "${TAK_CA_PASSWORD}" \
-        -noprompt
-    
-    chmod 644 "${cert_dir}/truststore-${hostname}.p12"
-    chmod 644 "${cert_dir}/truststore-${hostname}.jks"
 done
 
 echo "PKI Infrastructure Setup Complete"
