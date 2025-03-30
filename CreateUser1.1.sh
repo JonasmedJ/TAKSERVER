@@ -9,7 +9,7 @@ fi
 # Configuration file path
 config_file="$HOME/.tak_server_config"
 
-# Define default variables for CA Password and Truststore file name
+# Define default variables 
 CA_Password=""
 CACert=""
 TAKServer_Name=""
@@ -203,33 +203,6 @@ get_user_details() {
     done
 }
 
-# Function to create a config.pref file for iOS with certificate paths
-create_ios_config() {
-    certs_dir="$subfolder/certs"
-    config_pref="$certs_dir/config.pref"
-    
-    cat > "$config_pref" <<EOL
-<?xml version='1.0' standalone='yes'?>
-<preferences>
-  <preference version="1" name="cot_streams">
-    <entry key="count" class="class java.lang.Integer">1</entry>
-    <entry key="description0" class="class java.lang.String">${TAKServer_Name}</entry>
-    <entry key="enabled0" class="class java.lang.Boolean">true</entry>
-    <entry key="connectString0" class="class java.lang.String">${Connection_Name}:8089:ssl</entry>
-  </preference>
-  <preference version="1" name="com.atakmap.app_preferences">
-    <entry key="displayServerConnectionWidget" class="class java.lang.Boolean">true</entry>
-    <entry key="caLocation" class="class java.lang.String">cert/${CACert}.p12</entry>
-    <entry key="caPassword" class="class java.lang.String">${CA_Password}</entry>
-    <entry key="clientPassword" class="class java.lang.String">${CA_Password}</entry>
-    <entry key="certificateLocation" class="class java.lang.String">cert/${subfolder_name}.p12</entry>
-  </preference>
-</preferences>
-EOL
-
-    echo "config.pref file created successfully for iOS in $certs_dir."
-}
-
 # Function to create a config.pref file for Android
 create_android_config() {
     certs_dir="$subfolder/certs"
@@ -266,7 +239,7 @@ create_prefs_only_config() {
     certs_dir="$subfolder/certs"
     config_pref="$certs_dir/config.pref"
     
-    # Common portion for both iOS and Android preference-only configs
+    # Common portion for Android preference-only configs
     cat > "$config_pref" <<EOL
 <?xml version='1.0' encoding='ASCII' standalone='yes'?>
 <preferences>
@@ -275,11 +248,6 @@ create_prefs_only_config() {
     <entry key="locationCallsign" class="class java.lang.String">${subfolder_name}</entry>
     <entry key="locationTeam" class="class java.lang.String">${Team_Color}</entry>
     <entry key="atakRoleType" class="class java.lang.String">${Unit_Role}</entry>
-EOL
-
-    # Add Android-specific preferences if needed
-    if [ "$platform" == "android" ]; then
-        cat >> "$config_pref" <<EOL
     <entry key="deviceProfileEnableOnConnect" class="class java.lang.Boolean">true</entry>
     <entry key="coord_display_pref" class="class java.lang.String">MGRS</entry>
     <entry key="alt_display_pref" class="class java.lang.String">MSL</entry>
@@ -321,11 +289,6 @@ EOL
     <entry key="hidePreferenceItem_locationReportingStrategy" class="class java.lang.Boolean">true</entry>
     <entry key="hidePreferenceItem_manageInputsLink" class="class java.lang.Boolean">true</entry>
     <entry key="hidePreferenceItem_manageOutputsLink" class="class java.lang.Boolean">true</entry>
-EOL
-    fi
-
-    # Close the XML
-    cat >> "$config_pref" <<EOL
   </preference>
 </preferences>
 EOL
@@ -336,25 +299,7 @@ EOL
 # Function to create a MANIFEST.xml file with trust file
 create_full_manifest() {
     manifest_file="$subfolder/MANIFEST/MANIFEST.xml"
-    
-    # Customize manifest based on platform
-    if [ "$platform" == "ios" ]; then
-        cat > "$manifest_file" <<EOL
-<MissionPackageManifest version="2">
-  <Configuration>
-    <Parameter name="uid" value="ceb708ec-a6a3-11ea-bb37-0242ac130002"/>
-    <Parameter name="name" value="${subfolder_name}.zip"/>
-    <Parameter name="onReceiveDelete" value="true"/>
-  </Configuration>
-  <Contents>
-    <Content ignore="false" zipEntry="certs/${CACert}.p12"/>
-    <Content ignore="false" zipEntry="certs/${subfolder_name}.p12"/>
-    <Content ignore="false" zipEntry="certs/config.pref"/>
-  </Contents>
-</MissionPackageManifest>
-EOL
-    else
-        cat > "$manifest_file" <<EOL
+    cat > "$manifest_file" <<EOL
 <MissionPackageManifest version="2">
   <Configuration>
     <Parameter name="uid" value="ceb708ec-a6a3-11ea-bb37-0242ac130002"/>
@@ -367,7 +312,6 @@ EOL
   </Contents>
 </MissionPackageManifest>
 EOL
-    fi
 
     echo "Full MANIFEST.xml file created successfully in $manifest_file."
 }
@@ -417,52 +361,113 @@ display_current_config() {
     echo "==================================="
 }
 
-# Function to create a client certificate for iTAK
-create_itak_certificate() {
-    # Check if we have a username
-    if [ -z "$subfolder_name" ]; then
-        echo "Error: No username provided for certificate creation."
+# Function to create iPhone configuration (simplified)
+create_itak_configuration() {
+    # Create temporary directory for files
+    tmp_dir="$(mktemp -d)"
+    
+    # Prompt for iTAK username
+    echo "Choose a username for the iTAK user:"
+    read -p "> " itak_username
+    
+    if [ -z "$itak_username" ]; then
+        echo "Error: No username provided."
+        rm -rf "$tmp_dir"
         exit 1
     fi
     
-    echo "Creating certificate for iTAK user: $subfolder_name"
-    
-    # Use a direct approach with sudo su
-    echo "Switching to tak user and creating certificate..."
-    echo "This will execute commands as the tak user. Password may be required..."
-    
-    # Use heredoc to pass commands directly to sudo su tak
+    # Create certificate with tak user
+    echo "Creating certificate for iTAK user: $itak_username"
     sudo su - tak << EOF
 cd /opt/tak/certs/
-./makeCert.sh client "$subfolder_name"
+./makeCert.sh client "$itak_username"
 exit
 EOF
     
-    cert_result=$?
-    
-    if [ $cert_result -ne 0 ]; then
-        echo "Error: Failed to create certificate for $subfolder_name."
+    if [ $? -ne 0 ]; then
+        echo "Error: Certificate creation failed"
+        rm -rf "$tmp_dir"
         exit 1
     fi
     
-    # Move the generated certificate to our package folder
-    source_cert="/opt/tak/certs/files/${subfolder_name}.p12"
-    target_cert="$subfolder/certs/${subfolder_name}.p12"
+    # Check if certificate was created
+    client_cert="/opt/tak/certs/files/${itak_username}.p12"
+    if [ ! -f "$client_cert" ]; then
+        echo "Error: Certificate file not found at $client_cert"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
     
-    if [ -f "$source_cert" ]; then
-        echo "Moving certificate from $source_cert to $target_cert"
-        cp "$source_cert" "$target_cert"
-        
-        if [ $? -ne 0 ]; then
-            echo "Error: Failed to copy certificate to package folder."
-            exit 1
-        fi
+    # Copy client certificate
+    cp "$client_cert" "$tmp_dir/" || {
+        echo "Error: Failed to copy client certificate"
+        rm -rf "$tmp_dir"
+        exit 1
+    }
+    
+    # Find truststore
+    echo "Is your Truststore located in the Documents folder? (yes/no): "
+    read truststore_location_response
+    truststore_location_response=$(echo "$truststore_location_response" | tr '[:upper:]' '[:lower:]')
+    
+    if [[ "$truststore_location_response" == "yes" || "$truststore_location_response" == "y" ]]; then
+        search_dir="$home_dir/Documents"
     else
-        echo "Error: Certificate file not found at $source_cert."
+        echo "Please provide the directory where the Truststore file is located: "
+        read search_dir
+    fi
+    
+    truststore_file=$(find "$search_dir" -name "truststore-*.p12" -print -quit 2>/dev/null)
+    
+    if [[ -z "$truststore_file" ]]; then
+        echo "No Truststore file found in $search_dir."
+        rm -rf "$tmp_dir"
         exit 1
     fi
     
-    echo "Certificate created and copied successfully."
+    # Copy truststore
+    cp "$truststore_file" "$tmp_dir/$CACert.p12" || {
+        echo "Error: Failed to copy truststore certificate"
+        rm -rf "$tmp_dir"
+        exit 1
+    }
+    
+    # Create config.pref
+    cat > "$tmp_dir/config.pref" <<EOL
+<?xml version='1.0' standalone='yes'?>
+<preferences>
+  <preference version="1" name="cot_streams">
+    <entry key="count" class="class java.lang.Integer">1</entry>
+    <entry key="description0" class="class java.lang.String">$TAKServer_Name</entry>
+    <entry key="enabled0" class="class java.lang.Boolean">true</entry>
+    <entry key="connectString0" class="class java.lang.String">$Connection_Name:8089:ssl</entry>
+  </preference>
+  <preference version="1" name="com.atakmap.app_preferences">
+    <entry key="displayServerConnectionWidget" class="class java.lang.Boolean">true</entry>
+    <entry key="caLocation" class="class java.lang.String">cert/$CACert.p12</entry>
+    <entry key="caPassword" class="class java.lang.String">$CA_Password</entry>
+    <entry key="clientPassword" class="class java.lang.String">$CA_Password</entry>
+    <entry key="certificateLocation" class="class java.lang.String">cert/${itak_username}.p12</entry>
+  </preference>
+</preferences>
+EOL
+    
+    # Create zip file for iTAK
+    output_zip="$base_dir/${itak_username}.zip"
+    (cd "$tmp_dir" && zip -j "$output_zip" "config.pref" "$CACert.p12" "${itak_username}.p12")
+    
+    if [ $? -eq 0 ]; then
+        echo "Successfully created iTAK package: $output_zip"
+        echo "Package contains exactly:"
+        echo "- config.pref"
+        echo "- $CACert.p12 (truststore)"
+        echo "- ${itak_username}.p12 (client certificate)"
+    else
+        echo "Error: Failed to create the zip file."
+    fi
+    
+    # Clean up
+    rm -rf "$tmp_dir"
 }
 
 # Main execution starts here
@@ -486,7 +491,6 @@ while true; do
     case $main_choice in
       1)
         echo "Running iPhone (iTAK) Configuration!"
-        platform="ios"
         
         # Check if we have all required configuration values
         if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
@@ -494,38 +498,8 @@ while true; do
             configure_variables
         fi
         
-        # Create folder structure
-        create_data_package_subfolder
-        
-        # Setup truststore
-        setup_truststore
-        
-        # For iPhone configuration, we don't need role and team details
-        if [ "$platform" != "ios" ]; then
-            # Get user details for non-iOS platforms
-            get_user_details
-        fi
-        
-        # Create client certificate for iTAK
-        create_itak_certificate
-        
-        # Create full iOS configuration
-        create_ios_config
-        
-        # Create full manifest
-        create_full_manifest
-        
-        # Create full zip file
-        create_zip "-IOS"
-        
-        # Now create preferences-only configuration
-        create_prefs_only_config
-        
-        # Create preferences-only manifest
-        create_pref_manifest
-        
-        # Create preferences-only zip file
-        create_zip "-pref"
+        # Run the simplified iTAK configuration process
+        create_itak_configuration
         ;;
 
       2)
