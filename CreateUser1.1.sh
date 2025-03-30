@@ -223,9 +223,6 @@ create_ios_config() {
     <entry key="caPassword" class="class java.lang.String">${CA_Password}</entry>
     <entry key="clientPassword" class="class java.lang.String">${CA_Password}</entry>
     <entry key="certificateLocation" class="class java.lang.String">cert/${subfolder_name}.p12</entry>
-    <entry key="locationCallsign" class="class java.lang.String">${subfolder_name}</entry>
-    <entry key="locationTeam" class="class java.lang.String">${Team_Color}</entry>
-    <entry key="atakRoleType" class="class java.lang.String">${Unit_Role}</entry>
   </preference>
 </preferences>
 EOL
@@ -430,22 +427,18 @@ create_itak_certificate() {
     
     echo "Creating certificate for iTAK user: $subfolder_name"
     
-    # Switch to the tak user to execute makeCert.sh using sudo su
+    # Use a direct approach with sudo su
     echo "Switching to tak user and creating certificate..."
+    echo "This will execute commands as the tak user. Password may be required..."
     
-    # Create a temporary script file that will be executed as the tak user
-    cert_script=$(mktemp)
-    echo "#!/bin/bash" > "$cert_script"
-    echo "cd /opt/tak/certs/" >> "$cert_script"
-    echo "./makeCert.sh client \"$subfolder_name\"" >> "$cert_script"
-    chmod +x "$cert_script"
+    # Use heredoc to pass commands directly to sudo su tak
+    sudo su - tak << EOF
+cd /opt/tak/certs/
+./makeCert.sh client "$subfolder_name"
+exit
+EOF
     
-    # Execute the script as the tak user
-    sudo su tak -c "$cert_script"
     cert_result=$?
-    
-    # Clean up the temporary script
-    rm -f "$cert_script"
     
     if [ $cert_result -ne 0 ]; then
         echo "Error: Failed to create certificate for $subfolder_name."
@@ -507,8 +500,11 @@ while true; do
         # Setup truststore
         setup_truststore
         
-        # Get user details
-        get_user_details
+        # For iPhone configuration, we don't need role and team details
+        if [ "$platform" != "ios" ]; then
+            # Get user details for non-iOS platforms
+            get_user_details
+        fi
         
         # Create client certificate for iTAK
         create_itak_certificate
