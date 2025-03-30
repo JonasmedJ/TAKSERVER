@@ -381,7 +381,7 @@ EOF
         rm -rf "$tmp_dir"
         exit 1
     fi
-    
+
     # Check if certificate was created
     client_cert="/opt/tak/certs/files/${itak_username}.p12"
     if [ ! -f "$client_cert" ]; then
