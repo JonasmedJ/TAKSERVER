@@ -1,6 +1,6 @@
 #!/bin/bash
 
- Ensure the script is run with sudo
+# Ensure the script is run with sudo
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root using sudo."
     exit 1
@@ -203,27 +203,26 @@ get_user_details() {
     done
 }
 
-# Function to create a config.pref file for iOS
+# Function to create a config.pref file for iOS with certificate paths
 create_ios_config() {
     certs_dir="$subfolder/certs"
     config_pref="$certs_dir/config.pref"
     
     cat > "$config_pref" <<EOL
-<?xml version='1.0' encoding='ASCII' standalone='yes'?>
+<?xml version='1.0' standalone='yes'?>
 <preferences>
   <preference version="1" name="cot_streams">
     <entry key="count" class="class java.lang.Integer">1</entry>
     <entry key="description0" class="class java.lang.String">${TAKServer_Name}</entry>
     <entry key="enabled0" class="class java.lang.Boolean">true</entry>
     <entry key="connectString0" class="class java.lang.String">${Connection_Name}:8089:ssl</entry>
-    <entry key="caLocation0" class="class java.lang.String">cert/${CACert}.p12</entry>
-    <entry key="caPassword0" class="class java.lang.String">${CA_Password}</entry>
-    <entry key="enrollForCertificateWithTrust0" class="class java.lang.Boolean">true</entry>
-    <entry key="useAuth0" class="class java.lang.Boolean">true</entry>
-    <entry key="cacheCreds0" class="class java.lang.String">Cache credentials</entry>
   </preference>
   <preference version="1" name="com.atakmap.app_preferences">
     <entry key="displayServerConnectionWidget" class="class java.lang.Boolean">true</entry>
+    <entry key="caLocation" class="class java.lang.String">cert/${CACert}.p12</entry>
+    <entry key="caPassword" class="class java.lang.String">${CA_Password}</entry>
+    <entry key="clientPassword" class="class java.lang.String">${CA_Password}</entry>
+    <entry key="certificateLocation" class="class java.lang.String">cert/${subfolder_name}.p12</entry>
     <entry key="locationCallsign" class="class java.lang.String">${subfolder_name}</entry>
     <entry key="locationTeam" class="class java.lang.String">${Team_Color}</entry>
     <entry key="atakRoleType" class="class java.lang.String">${Unit_Role}</entry>
@@ -252,6 +251,12 @@ create_android_config() {
     <entry key="enrollForCertificateWithTrust0" class="class java.lang.Boolean">true</entry>
     <entry key="useAuth0" class="class java.lang.Boolean">true</entry>
     <entry key="cacheCreds0" class="class java.lang.String">Cache credentials</entry>
+  </preference>
+  <preference version="1" name="com.atakmap.app_preferences">
+    <entry key="displayServerConnectionWidget" class="class java.lang.Boolean">true</entry>
+    <entry key="locationCallsign" class="class java.lang.String">${subfolder_name}</entry>
+    <entry key="locationTeam" class="class java.lang.String">${Team_Color}</entry>
+    <entry key="atakRoleType" class="class java.lang.String">${Unit_Role}</entry>
   </preference>
 </preferences>
 EOL
@@ -334,7 +339,25 @@ EOL
 # Function to create a MANIFEST.xml file with trust file
 create_full_manifest() {
     manifest_file="$subfolder/MANIFEST/MANIFEST.xml"
-    cat > "$manifest_file" <<EOL
+    
+    # Customize manifest based on platform
+    if [ "$platform" == "ios" ]; then
+        cat > "$manifest_file" <<EOL
+<MissionPackageManifest version="2">
+  <Configuration>
+    <Parameter name="uid" value="ceb708ec-a6a3-11ea-bb37-0242ac130002"/>
+    <Parameter name="name" value="${subfolder_name}.zip"/>
+    <Parameter name="onReceiveDelete" value="true"/>
+  </Configuration>
+  <Contents>
+    <Content ignore="false" zipEntry="certs/${CACert}.p12"/>
+    <Content ignore="false" zipEntry="certs/${subfolder_name}.p12"/>
+    <Content ignore="false" zipEntry="certs/config.pref"/>
+  </Contents>
+</MissionPackageManifest>
+EOL
+    else
+        cat > "$manifest_file" <<EOL
 <MissionPackageManifest version="2">
   <Configuration>
     <Parameter name="uid" value="ceb708ec-a6a3-11ea-bb37-0242ac130002"/>
@@ -347,6 +370,7 @@ create_full_manifest() {
   </Contents>
 </MissionPackageManifest>
 EOL
+    fi
 
     echo "Full MANIFEST.xml file created successfully in $manifest_file."
 }
@@ -396,6 +420,45 @@ display_current_config() {
     echo "==================================="
 }
 
+# Function to create a client certificate for iTAK
+create_itak_certificate() {
+    # Check if we have a username
+    if [ -z "$subfolder_name" ]; then
+        echo "Error: No username provided for certificate creation."
+        exit 1
+    fi
+    
+    echo "Creating certificate for iTAK user: $subfolder_name"
+    
+    # Switch to the tak user to execute makeCert.sh
+    echo "Switching to tak user and creating certificate..."
+    sudo -u tak /opt/tak/certs/makeCert.sh client "$subfolder_name"
+    
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to create certificate for $subfolder_name."
+        exit 1
+    fi
+    
+    # Move the generated certificate to our package folder
+    source_cert="/opt/tak/certs/files/${subfolder_name}.p12"
+    target_cert="$subfolder/certs/${subfolder_name}.p12"
+    
+    if [ -f "$source_cert" ]; then
+        echo "Moving certificate from $source_cert to $target_cert"
+        cp "$source_cert" "$target_cert"
+        
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to copy certificate to package folder."
+            exit 1
+        fi
+    else
+        echo "Error: Certificate file not found at $source_cert."
+        exit 1
+    fi
+    
+    echo "Certificate created and copied successfully."
+}
+
 # Main execution starts here
 
 # Trap on ERR for cleanup
@@ -416,7 +479,7 @@ while true; do
 
     case $main_choice in
       1)
-        echo "Running iPhone script!"
+        echo "Running iPhone (iTAK) Configuration!"
         platform="ios"
         
         # Check if we have all required configuration values
@@ -433,6 +496,9 @@ while true; do
         
         # Get user details
         get_user_details
+        
+        # Create client certificate for iTAK
+        create_itak_certificate
         
         # Create full iOS configuration
         create_ios_config
