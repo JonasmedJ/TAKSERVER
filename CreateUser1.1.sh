@@ -430,11 +430,24 @@ create_itak_certificate() {
     
     echo "Creating certificate for iTAK user: $subfolder_name"
     
-    # Switch to the tak user to execute makeCert.sh
+    # Switch to the tak user to execute makeCert.sh using sudo su
     echo "Switching to tak user and creating certificate..."
-    sudo -u tak /opt/tak/certs/makeCert.sh client "$subfolder_name"
     
-    if [ $? -ne 0 ]; then
+    # Create a temporary script file that will be executed as the tak user
+    cert_script=$(mktemp)
+    echo "#!/bin/bash" > "$cert_script"
+    echo "cd /opt/tak/certs/" >> "$cert_script"
+    echo "./makeCert.sh client \"$subfolder_name\"" >> "$cert_script"
+    chmod +x "$cert_script"
+    
+    # Execute the script as the tak user
+    sudo su tak -c "$cert_script"
+    cert_result=$?
+    
+    # Clean up the temporary script
+    rm -f "$cert_script"
+    
+    if [ $cert_result -ne 0 ]; then
         echo "Error: Failed to create certificate for $subfolder_name."
         exit 1
     fi
