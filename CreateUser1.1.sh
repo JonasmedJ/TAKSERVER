@@ -145,17 +145,9 @@ cleanup() {
 
 # Function to find and copy truststore
 setup_truststore() {
-    # Ask the user if the Truststore is located in the Documents folder
-    read -p "Is your Truststore located in the Documents folder? (yes/no): " truststore_location_response
-    truststore_location_response=$(echo "$truststore_location_response" | tr '[:upper:]' '[:lower:]')
-
-    # Determine the search directory for the Truststore file
-    if [[ "$truststore_location_response" == "yes" || "$truststore_location_response" == "y" ]]; then
-        search_dir="$home_dir/Documents"
-    else
-        read -p "Please provide the directory where the Truststore file is located: " search_dir
-    fi
-
+    # Search in Documents directory by default
+    search_dir="$home_dir/Documents"
+    
     # Search for the Truststore file in the specified directory
     truststore_file=$(find "$search_dir" -name "truststore-*.p12" -print -quit 2>/dev/null)
 
@@ -405,17 +397,8 @@ EOF
         exit 1
     }
     
-    # Find truststore
-    echo "Is your Truststore located in the Documents folder? (yes/no): "
-    read truststore_location_response
-    truststore_location_response=$(echo "$truststore_location_response" | tr '[:upper:]' '[:lower:]')
-    
-    if [[ "$truststore_location_response" == "yes" || "$truststore_location_response" == "y" ]]; then
-        search_dir="$home_dir/Documents"
-    else
-        echo "Please provide the directory where the Truststore file is located: "
-        read search_dir
-    fi
+    # Search in Documents directory by default
+    search_dir="$home_dir/Documents"
     
     truststore_file=$(find "$search_dir" -name "truststore-*.p12" -print -quit 2>/dev/null)
     
@@ -453,7 +436,7 @@ EOF
 EOL
     
     # Create zip file for iTAK
-    output_zip="$base_dir/${itak_username}.zip"
+    output_zip="$base_dir/${itak_username}-ios.zip"
     (cd "$tmp_dir" && zip -j "$output_zip" "config.pref" "$CACert.p12" "${itak_username}.p12")
     
     if [ $? -eq 0 ]; then
