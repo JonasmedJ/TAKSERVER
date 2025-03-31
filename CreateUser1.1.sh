@@ -128,7 +128,7 @@ create_data_package_subfolder() {
     fi
 
     # Create the subfolder and its subdirectories
-    mkdir -p "$subfolder/certs" "$subfolder/MANIFEST" || { echo "Failed to create subfolders"; exit 1; }
+    mkdir -p "$subfolder/certs" "$subfolder/MANIFEST" "$subfolder/maps" || { echo "Failed to create subfolders"; exit 1; }
     
     # Notify the user
     echo "Created subfolder at: $subfolder"
@@ -141,6 +141,29 @@ cleanup() {
         rm -rf "$subfolder"
     fi
     exit 1
+}
+
+# Function to download map files
+download_map_files() {
+    maps_dir="$subfolder/maps"
+    echo "Downloading map files to: $maps_dir"
+    
+    # Download Google Hybrid map
+    echo "Downloading Google Hybrid map..."
+    curl -s -o "$maps_dir/google_hybrid.xml" "https://raw.githubusercontent.com/joshuafuller/ATAK-Maps/refs/heads/master/Google/google_hybrid.xml" || { 
+        echo "Error: Failed to download Google Hybrid map"; 
+        return 1; 
+    }
+    
+    # Download OpenTopo map
+    echo "Downloading OpenTopo map..."
+    curl -s -o "$maps_dir/opentopo_opentopomap.xml" "https://raw.githubusercontent.com/joshuafuller/ATAK-Maps/refs/heads/master/opentopo/opentopo_opentopomap.xml" || { 
+        echo "Error: Failed to download OpenTopo map"; 
+        return 1; 
+    }
+    
+    echo "Map files downloaded successfully."
+    return 0
 }
 
 # Function to find and copy truststore
@@ -288,7 +311,7 @@ EOL
     echo "Preferences-only config.pref file created successfully in $certs_dir."
 }
 
-# Function to create a MANIFEST.xml file with trust file
+# Function to create a MANIFEST.xml file with trust file and maps
 create_full_manifest() {
     manifest_file="$subfolder/MANIFEST/MANIFEST.xml"
     cat > "$manifest_file" <<EOL
@@ -301,6 +324,8 @@ create_full_manifest() {
   <Contents>
     <Content ignore="false" zipEntry="certs/${CACert}.p12"/>
     <Content ignore="false" zipEntry="certs/config.pref"/>
+    <Content ignore="false" zipEntry="maps/google_hybrid.xml"/>
+    <Content ignore="false" zipEntry="maps/opentopo_opentopomap.xml"/>
   </Contents>
 </MissionPackageManifest>
 EOL
@@ -308,7 +333,7 @@ EOL
     echo "Full MANIFEST.xml file created successfully in $manifest_file."
 }
 
-# Function to create a MANIFEST.xml file without trust file
+# Function to create a MANIFEST.xml file without trust file but with maps
 create_pref_manifest() {
     manifest_file="$subfolder/MANIFEST/MANIFEST.xml"
     cat > "$manifest_file" <<EOL
@@ -321,6 +346,8 @@ create_pref_manifest() {
   <Contents>
     <Content ignore="true" zipEntry="support/atak_splash.png"/>
     <Content ignore="false" zipEntry="certs/config.pref"/>
+    <Content ignore="false" zipEntry="maps/google_hybrid.xml"/>
+    <Content ignore="false" zipEntry="maps/opentopo_opentopomap.xml"/>
   </Contents>
 </MissionPackageManifest>
 EOL
@@ -504,10 +531,13 @@ while true; do
         # Get user details
         get_user_details
         
+        # Download map files
+        download_map_files
+        
         # Create full Android configuration
         create_android_config
         
-        # Create full manifest
+        # Create full manifest with maps
         create_full_manifest
         
         # Create full zip file
@@ -516,7 +546,7 @@ while true; do
         # Now create preferences-only configuration
         create_prefs_only_config
         
-        # Create preferences-only manifest
+        # Create preferences-only manifest with maps
         create_pref_manifest
         
         # Create preferences-only zip file
