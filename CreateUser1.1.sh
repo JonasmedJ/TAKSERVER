@@ -1,4 +1,9 @@
 #!/bin/bash
+# Written by Jonas O.
+# @JonasMedJ at Fiverr & Upwork
+# If redistributed, please refer it to me, in order to allow proper credits.
+
+
 
 # Ensure the script is run with sudo
 if [ "$EUID" -ne 0 ]; then
@@ -273,37 +278,6 @@ create_prefs_only_config() {
     <entry key="staleRemoteDisconnects" class="class java.lang.Boolean">false</entry>
     <entry key="map_center_designator" class="class java.lang.Boolean">true</entry>
     <entry key="atakLongPressMap" class="class java.lang.String">nothing</entry>
-    
-    <!-- hide user preference options -->
-    <entry key="hidePreferenceItem_atakAccounts" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_geocoderPreferences" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_geocodeSupplier" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_atakAdjustCurvedDisplay" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_deviceProfileEnableOnConnect" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_atakChangeLog" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_hostileUpdateDelay" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_apiCertEnrollmentPort" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_apiCertEnrollmentKeyLength" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_chatAddress" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_chatPort" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_encryptionPassphrase" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_configureNonStreamingEncryption" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_clientPassword" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_certificateLocation" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_default_client_credentials" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_caLocation" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_caPassword" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_network_dhcp" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_dexControls" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_network_static_ip_address" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_isrvNetworkPreference" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_apiSecureServerPort" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_apiUnsecureServerPort" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_publishCategory" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_reportingSettings" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_locationReportingStrategy" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_manageInputsLink" class="class java.lang.Boolean">true</entry>
-    <entry key="hidePreferenceItem_manageOutputsLink" class="class java.lang.Boolean">true</entry>
   </preference>
 </preferences>
 EOL
@@ -480,6 +454,216 @@ EOL
     rm -rf "$tmp_dir"
 }
 
+# NEW FUNCTION: List All Users
+list_all_users() {
+    echo "=== TAK Server Users ==="
+    
+    # Check if the base directory exists
+    if [ ! -d "$base_dir" ]; then
+        echo "No data package directory found at $base_dir"
+        return
+    fi
+    
+    # Arrays to store different types of users
+    android_users=()
+    iphone_users=()
+    
+    # Find Android user folders
+    for user_dir in "$base_dir"/*; do
+        if [ -d "$user_dir" ]; then
+            user_name=$(basename "$user_dir")
+            android_users+=("$user_name")
+        fi
+    done
+    
+    # Find Android zip files (non-iOS)
+    for zip_file in "$base_dir"/*.zip; do
+        if [ -f "$zip_file" ] && [[ ! "$zip_file" == *"-ios.zip" ]]; then
+            zip_name=$(basename "$zip_file" .zip)
+            # Handle the case where we have both normal and -pref zip files
+            if [[ "$zip_name" == *"-pref" ]]; then
+                base_name="${zip_name%-pref}"
+                if [[ ! " ${android_users[@]} " =~ " ${base_name} " ]]; then
+                    android_users+=("$base_name")
+                fi
+            else
+                if [[ ! " ${android_users[@]} " =~ " ${zip_name} " ]]; then
+                    android_users+=("$zip_name")
+                fi
+            fi
+        fi
+    done
+    
+    # Find iPhone users (-ios.zip)
+    for zip_file in "$base_dir"/*-ios.zip; do
+        if [ -f "$zip_file" ]; then
+            zip_name=$(basename "$zip_file" -ios.zip)
+            iphone_users+=("$zip_name")
+        fi
+    done
+    
+    # Display the results
+    echo "Android users:"
+    if [ ${#android_users[@]} -eq 0 ]; then
+        echo "  No Android users found."
+    else
+        for ((i=0; i<${#android_users[@]}; i++)); do
+            echo "  $((i+1)). ${android_users[$i]}"
+        done
+    fi
+    
+    echo -e "\niPhone (iTAK) users:"
+    if [ ${#iphone_users[@]} -eq 0 ]; then
+        echo "  No iPhone users found."
+    else
+        for ((i=0; i<${#iphone_users[@]}; i++)); do
+            echo "  $((i+1)). ${iphone_users[$i]}"
+        done
+    fi
+}
+
+# NEW FUNCTION: Remove User
+remove_user() {
+    echo "=== Remove User ==="
+    
+    # Arrays to store different types of users
+    android_users=()
+    iphone_users=()
+    all_users=()
+    user_types=()  # To track whether each user is Android or iPhone
+    
+    # Find Android user folders and zip files
+    for user_dir in "$base_dir"/*; do
+        if [ -d "$user_dir" ]; then
+            user_name=$(basename "$user_dir")
+            if [[ ! " ${android_users[@]} " =~ " ${user_name} " ]]; then
+                android_users+=("$user_name")
+                all_users+=("$user_name")
+                user_types+=("android")
+            fi
+        fi
+    done
+    
+    for zip_file in "$base_dir"/*.zip; do
+        if [ -f "$zip_file" ] && [[ ! "$zip_file" == *"-ios.zip" ]]; then
+            zip_name=$(basename "$zip_file" .zip)
+            # Handle the case where we have both normal and -pref zip files
+            if [[ "$zip_name" == *"-pref" ]]; then
+                base_name="${zip_name%-pref}"
+                if [[ ! " ${android_users[@]} " =~ " ${base_name} " ]]; then
+                    android_users+=("$base_name")
+                    all_users+=("$base_name")
+                    user_types+=("android")
+                fi
+            else
+                if [[ ! " ${android_users[@]} " =~ " ${zip_name} " ]]; then
+                    android_users+=("$zip_name")
+                    all_users+=("$zip_name")
+                    user_types+=("android")
+                fi
+            fi
+        fi
+    done
+    
+    # Find iPhone users
+    for zip_file in "$base_dir"/*-ios.zip; do
+        if [ -f "$zip_file" ]; then
+            zip_name=$(basename "$zip_file" -ios.zip)
+            iphone_users+=("$zip_name")
+            all_users+=("$zip_name (iPhone)")
+            user_types+=("iphone")
+        fi
+    done
+    
+    # Check if there are any users to remove
+    if [ ${#all_users[@]} -eq 0 ]; then
+        echo "No users found to remove."
+        return
+    fi
+    
+    # Display menu of users
+    echo "Select a user to remove:"
+    PS3="Enter number (or 0 to cancel): "
+    select user_to_remove in "${all_users[@]}" "Cancel"; do
+        if [ "$REPLY" -eq "$((${#all_users[@]}+1))" ] || [ "$REPLY" -eq 0 ]; then
+            echo "Operation cancelled."
+            return
+        fi
+        
+        if [ "$REPLY" -gt 0 ] && [ "$REPLY" -le "${#all_users[@]}" ]; then
+            selected_index=$((REPLY-1))
+            selected_user="${all_users[$selected_index]}"
+            user_type="${user_types[$selected_index]}"
+            
+            # Extract the actual username from displayed name for iPhone users
+            if [[ "$user_type" == "iphone" ]]; then
+                actual_username="${selected_user% (iPhone)}"
+            else
+                actual_username="$selected_user"
+            fi
+            
+            echo "You selected to remove: $selected_user"
+            
+            # Different handling based on user type
+            if [[ "$user_type" == "android" ]]; then
+                # Android user removal
+                read -p "Are you sure you want to remove this Android user? This will delete all associated files. (y/n): " confirm
+                if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                    # Remove user directory if it exists
+                    if [ -d "$base_dir/$actual_username" ]; then
+                        rm -rf "$base_dir/$actual_username" && echo "Deleted user directory: $base_dir/$actual_username"
+                    fi
+                    
+                    # Remove user zip files
+                    rm -f "$base_dir/$actual_username.zip" && echo "Deleted user zip file: $base_dir/$actual_username.zip"
+                    rm -f "$base_dir/$actual_username-pref.zip" && echo "Deleted user preferences zip file: $base_dir/$actual_username-pref.zip"
+                    
+                    echo "Android user $actual_username has been removed."
+                else
+                    echo "Removal cancelled."
+                fi
+            else
+                # iPhone user removal
+                read -p "Are you sure you want to remove this iPhone user? This will revoke their certificate. (y/n): " confirm
+                if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                    # Revoke the certificate
+                    echo "Revoking certificate for $actual_username..."
+                    sudo su - tak << EOF
+                    cd /opt/tak/certs
+                    ./revokeCert.sh "$actual_username"
+                    exit
+                    EOF
+                    
+                    if [ $? -eq 0 ]; then
+                        echo "Certificate for $actual_username has been revoked."
+                        
+                        # Remove user zip file
+                        rm -f "$base_dir/$actual_username-ios.zip" && echo "Deleted user zip file: $base_dir/$actual_username-ios.zip"
+                        
+                        # Ask about server restart
+                        echo ""
+                        read -p "Do you want to restart the TAK server? This must be done after revoking iTAK clients! (y/n): " restart_server
+                        if [[ "$restart_server" =~ ^[Yy]$ ]]; then
+                            echo "Restarting TAK server..."
+                            sudo systemctl restart takserver
+                            echo "TAK server has been restarted."
+                        else
+                            echo "You should restart the server as soon as possible!"
+                        fi
+                    else
+                        echo "Error: Failed to revoke certificate for $actual_username."
+                    fi
+                else
+                    echo "Removal cancelled."
+                fi
+            fi
+            break
+        else
+            echo "Invalid selection."
+        fi
+    done
+}
+
 # Main execution starts here
 
 # Trap on ERR for cleanup
@@ -490,17 +674,19 @@ while true; do
     echo "TAK Server User Configuration Tool"
     echo "==================================="
     echo "Please select an option:"
-    echo "1. Create iPhone Configuration"
-    echo "2. Create Android Configuration"
+    echo "1. Create ITAK Configuration"
+    echo "2. Create ATAK Configuration"
     echo "3. Configure TAK Server Settings"
     echo "4. Show Current Configuration"
-    echo "5. Exit"
+    echo "5. List Current Users"
+    echo "6. Remove User"
+    echo "7. Exit"
     echo ""
-    read -p "Enter your choice [1-5]: " main_choice
+    read -p "Enter your choice [1-7]: " main_choice
 
     case $main_choice in
       1)
-        echo "Running iPhone (iTAK) Configuration!"
+        echo "Running ITAK user creation."
         
         # Check if we have all required configuration values
         if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
@@ -513,7 +699,7 @@ while true; do
         ;;
 
       2)
-        echo "Running Android script!"
+        echo "Running ATAK user creation."
         platform="android"
         
         # Check if we have all required configuration values
@@ -562,14 +748,24 @@ while true; do
         # Display current configuration
         display_current_config
         ;;
-        
+
       5)
-        echo "Exiting TAK Server User Configuration Tool."
+        # List all users
+        list_all_users
+        ;;
+        
+      6)
+        # Remove user
+        remove_user
+        ;;
+        
+      7)
+        echo "Exiting User Configuration Tool."
         exit 0
         ;;
         
       *)
-        echo "Invalid option. Please select 1, 2, 3, 4, or 5."
+        echo "Invalid option. Please select 1-7."
         ;;
     esac
 done
