@@ -525,11 +525,14 @@ revoke_iphone_certificate() {
     local client="$1"
     local ca_cert="$2"
     
+    # Extract the CA name without "truststore-" prefix if present
+    local ca_base_name="${ca_cert#truststore-}"
+    
     # Using the exact command structure as specified
     # Execute the commands as the tak user
     sudo su - tak << EOT
 cd /opt/tak/certs
-./revokeCert.sh /opt/tak/certs/files/"$client" /opt/tak/certs/files/$ca_cert /opt/tak/certs/files/$ca_cert
+./revokeCert.sh /opt/tak/certs/files/"$client" /opt/tak/certs/files/$ca_base_name /opt/tak/certs/files/$ca_base_name
 exit
 EOT
     
