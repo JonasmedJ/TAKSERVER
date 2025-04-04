@@ -520,66 +520,17 @@ list_all_users() {
     fi
 }
 
-# NEW FUNCTION: Revoke iPhone Certificate
+# NEW FUNCTION: Revoke iPhone Certificate - Simple direct approach
 revoke_iphone_certificate() {
     local client="$1"
     
-    # Execute the improved revocation process
-    sudo bash -c "
-    dir=/opt/tak
-    certs=\$dir/certs/files
-    revokeCert=\$dir/certs/revokeCert.sh
-    RED='\033[0;31m'
-    YELLOW='\033[0;33m'
-    NC='\033[0m'
-    
-    # Read the cert-metadata.sh file
-    . \$dir/certs/cert-metadata.sh
-    
-    display_err() {
-        echo -e \"\${RED}Client Certificate: $client not found.\${NC}\"   
-    }
-    
-    # Determine the Issuing CA (.pem)
-    if [[ -f \$certs/$client.pem ]]; then
-        issuer=(\`openssl x509 -text -in /opt/tak/certs/files/$client.pem | grep -Eo \"CN=.+\"\`)
-        issuer=\"\${issuer[0]:3}\"
-        # Check CoreConfig for CA Element
-        crl=(\`cat /opt/tak/CoreConfig.xml | grep -Eo \"<crl.+/>\"\`)
-        if [[ -z \"\${crl[0]}\" ]]; then
-            echo -e \"\${YELLOW}CRL Element not found in Configuration.\${NC}\"
-            echo -e \"\${YELLOW}Add the following line within the tls element within the CoreConfig to apply the revokation.\${NC}\"
-            echo -e \"\${YELLOW}<crl _name=\\\"TAKServer CA\\\" crlFile=\\\"certs/files/ca.crl\\\"/>\${NC}\"
-            echo -e \"\${YELLOW}Replace ca.crl with the appropriate crl file.\${NC}\"
-            echo \"\"
-        fi
-        
-        # Find Issuing CA (.pem)
-        if [[ -f \$certs/\${issuer[0]}.pem ]]; then
-            ca=\"\${issuer[0]}\"
-            key=\"\${issuer[0]}\"
-        else
-            # Default Issuing CA
-            echo \"Issuing CA not found, reverting to default.\"
-            ca=\"ca\"
-            key=\"ca-do-not-share\"
-        fi
-    else
-        display_err
-        exit 1
-    fi
-    
-    # Revoke the client certificate
-    if [[ -f \$certs/$client.pem ]]; then
-        cd \$dir/certs || exit 1
-        \$revokeCert \$certs/$client \$certs/\$key \$certs/\$ca
-        return 0
-    else
-        # Client Certificate not found
-        display_err
-        exit 1
-    fi
-    "
+    # Using the exact command structure as specified
+    # Execute the commands as the tak user
+    sudo su - tak << EOT
+cd /opt/tak/certs
+./revokeCert.sh /opt/tak/certs/files/"$client" /opt/tak/certs/files/ca /opt/tak/certs/files/ca
+exit
+EOT
     
     return $?
 }
@@ -686,18 +637,12 @@ remove_user() {
                 # iPhone user removal
                 read -p "Are you sure you want to remove this iPhone user? This will revoke their certificate. (y/n): " confirm
                 if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                    # Revoke the certificate
+                    # Indicate the revocation process
                     echo "Revoking certificate for $actual_username..."
                     
-                    # Use the improved revocation function
+                    # Run the revocation function
                     if revoke_iphone_certificate "$actual_username"; then
                         echo "Certificate for $actual_username has been revoked."
-                        
-                        # Ask about deleting certificate files
-                        read -p "Do you wish to delete the revoked certificate files? (y/n): " delete_certs
-                        if [[ "$delete_certs" =~ ^[Yy]$ ]]; then
-                            sudo rm -v "/opt/tak/certs/files/$actual_username".{pem,key,csr,jks} 2>/dev/null
-                        fi
                         
                         # Remove user zip file
                         rm -f "$base_dir/$actual_username-ios.zip" && echo "Deleted user zip file: $base_dir/$actual_username-ios.zip"
