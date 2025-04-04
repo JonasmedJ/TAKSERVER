@@ -523,12 +523,13 @@ list_all_users() {
 # NEW FUNCTION: Revoke iPhone Certificate - Simple direct approach
 revoke_iphone_certificate() {
     local client="$1"
+    local ca_cert="$2"
     
     # Using the exact command structure as specified
     # Execute the commands as the tak user
     sudo su - tak << EOT
 cd /opt/tak/certs
-./revokeCert.sh /opt/tak/certs/files/"$client" /opt/tak/certs/files/ca /opt/tak/certs/files/ca
+./revokeCert.sh /opt/tak/certs/files/"$client" /opt/tak/certs/files/$ca_cert /opt/tak/certs/files/$ca_cert
 exit
 EOT
     
@@ -641,8 +642,17 @@ remove_user() {
                     echo "Revoking certificate for $actual_username..."
                     
                     # Run the revocation function
-                    if revoke_iphone_certificate "$actual_username"; then
+                    if revoke_iphone_certificate "$actual_username" "$CACert"; then
                         echo "Certificate for $actual_username has been revoked."
+                        
+                        # Remove certificate files
+                        echo "Removing certificate files..."
+                        sudo rm -f "/opt/tak/certs/files/$actual_username.csr" 2>/dev/null
+                        sudo rm -f "/opt/tak/certs/files/$actual_username.jks" 2>/dev/null
+                        sudo rm -f "/opt/tak/certs/files/$actual_username.pem" 2>/dev/null
+                        sudo rm -f "/opt/tak/certs/files/$actual_username.p12" 2>/dev/null
+                        sudo rm -f "/opt/tak/certs/files/$actual_username.key" 2>/dev/null
+                        sudo rm -f "/opt/tak/certs/files/$actual_username-trusted.pem" 2>/dev/null
                         
                         # Remove user zip file
                         rm -f "$base_dir/$actual_username-ios.zip" && echo "Deleted user zip file: $base_dir/$actual_username-ios.zip"
