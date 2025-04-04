@@ -626,9 +626,10 @@ remove_user() {
                 if [[ "$confirm" =~ ^[Yy]$ ]]; then
                     # Revoke the certificate
                     echo "Revoking certificate for $actual_username..."
+                    # Use the .pem file for revocation
                     sudo su - tak << EOT
 cd /opt/tak/certs
-./revokeCert.sh "$actual_username"
+./revokeCert.sh "$actual_username.pem"
 exit
 EOT
                     
