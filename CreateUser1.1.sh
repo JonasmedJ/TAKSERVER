@@ -520,7 +520,7 @@ list_all_users() {
     fi
 }
 
-# NEW FUNCTION: Revoke iPhone Certificate - Simple direct approach
+# NEW FUNCTION: Revoke iPhone Certificate - Correct approach based on exact specification
 revoke_iphone_certificate() {
     local client="$1"
     local ca_cert="$2"
@@ -528,11 +528,10 @@ revoke_iphone_certificate() {
     # Extract the CA name without "truststore-" prefix if present
     local ca_base_name="${ca_cert#truststore-}"
     
-    # Using the exact command structure as specified
-    # Execute the commands as the tak user
+    # Execute the commands as the tak user with the exact format specified
     sudo su - tak << EOT
 cd /opt/tak/certs
-./revokeCert.sh /opt/tak/certs/files/"$client" /opt/tak/certs/files/$ca_base_name /opt/tak/certs/files/$ca_base_name
+./revokeCert.sh "$client" "$ca_base_name" "$ca_base_name"
 exit
 EOT
     
