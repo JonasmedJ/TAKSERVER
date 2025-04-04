@@ -3,8 +3,6 @@
 # @JonasMedJ at Fiverr & Upwork
 # If redistributed, please refer it to me, in order to allow proper credits.
 
-
-
 # Ensure the script is run with sudo
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root using sudo."
@@ -371,11 +369,11 @@ create_itak_configuration() {
     
     # Create certificate with tak user
     echo "Creating certificate for iTAK user: $itak_username"
-    sudo su - tak << EOF
+    sudo su - tak << EOT
 cd /opt/tak/certs/
 ./makeCert.sh client "$itak_username"
 exit
-EOF
+EOT
     
     if [ $? -ne 0 ]; then
         echo "Error: Certificate creation failed"
@@ -628,11 +626,11 @@ remove_user() {
                 if [[ "$confirm" =~ ^[Yy]$ ]]; then
                     # Revoke the certificate
                     echo "Revoking certificate for $actual_username..."
-                    sudo su - tak << EOF
-                    cd /opt/tak/certs
-                    ./revokeCert.sh "$actual_username"
-                    exit
-                    EOF
+                    sudo su - tak << EOT
+cd /opt/tak/certs
+./revokeCert.sh "$actual_username"
+exit
+EOT
                     
                     if [ $? -eq 0 ]; then
                         echo "Certificate for $actual_username has been revoked."
