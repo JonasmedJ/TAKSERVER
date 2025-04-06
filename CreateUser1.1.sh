@@ -9,6 +9,11 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Function to clear the terminal
+clear_terminal() {
+    clear
+}
+
 # Configuration file path
 config_file="$HOME/.tak_server_config"
 
@@ -42,6 +47,7 @@ EOL
 
 # Function to configure variables
 configure_variables() {
+    clear_terminal
     echo "=== TAK Server Configuration ==="
     
     # Show current values if they exist
@@ -74,16 +80,20 @@ configure_variables() {
 }
 
 # Display initial message
-cat <<'EOF'
+display_welcome() {
+    cat <<'EOF'
   Hey! I've created this script to create users in your TAK Server, which (hopefully) makes it a lot easier for implementation.
   
 EOF
+}
 
 # Check if we have a saved configuration
-if ! load_configuration; then
-    echo "No configuration found. Let's set up your TAK Server configuration first."
-    configure_variables
-fi
+load_configuration_on_start() {
+    if ! load_configuration; then
+        echo "No configuration found. Let's set up your TAK Server configuration first."
+        configure_variables
+    fi
+}
 
 # Determine the home directory of the user who invoked sudo
 home_dir=$(eval echo ~$SUDO_USER)
@@ -96,6 +106,7 @@ subfolder=""
 
 # Function to create the dataPackage directory and a new subfolder inside it
 create_data_package_subfolder() {
+    clear_terminal
     # Create the dataPackage directory if it doesn't exist
     mkdir -p "$base_dir" || { echo "Failed to create base directory"; exit 1; }
 
@@ -196,6 +207,7 @@ setup_truststore() {
 
 # Function to prompt for user role and team color
 get_user_details() {
+    clear_terminal
     # Prompt the user to select the Unit Role
     unit_options=("Team Member" "Team Lead" "HQ" "Sniper" "Medic" "Forward Observer" "RTO" "K9")
     PS3="Select the unit role: "
@@ -342,18 +354,49 @@ create_zip() {
     fi
 }
 
+# New function to fix ownership of files and folders
+fix_ownership() {
+    local path_to_fix=$1
+    
+    if [ -z "$SUDO_USER" ]; then
+        echo "Warning: SUDO_USER not set, cannot fix ownership."
+        return 1
+    fi
+    
+    if [ -z "$path_to_fix" ]; then
+        echo "No path specified for ownership fix."
+        return 1
+    fi
+    
+    echo "Changing ownership of $path_to_fix to $SUDO_USER"
+    chown -R "$SUDO_USER":"$(id -gn "$SUDO_USER")" "$path_to_fix"
+    
+    if [ $? -eq 0 ]; then
+        echo "Ownership changed successfully."
+        return 0
+    else
+        echo "Error: Failed to change ownership."
+        return 1
+    fi
+}
+
 # Function to display current configuration
 display_current_config() {
+    clear_terminal
     echo "=== Current TAK Server Configuration ==="
     echo "CA Password: $CA_Password"
     echo "Truststore File Name: $CACert"
     echo "TAK Server Name: $TAKServer_Name"
     echo "Connection Name/IP: $Connection_Name"
     echo "==================================="
+    
+    # Wait for user to press a key before returning to the menu
+    read -n 1 -s -r -p "Press any key to continue..."
 }
 
 # Function to create iPhone configuration (simplified)
 create_itak_configuration() {
+    clear_terminal
     # Create temporary directory for files
     tmp_dir="$(mktemp -d)"
     
@@ -444,21 +487,29 @@ EOL
         echo "- config.pref"
         echo "- $CACert.p12 (truststore)"
         echo "- ${itak_username}.p12 (client certificate)"
+        
+        # Fix ownership of the iOS zip file
+        fix_ownership "$output_zip"
     else
         echo "Error: Failed to create the zip file."
     fi
     
     # Clean up
     rm -rf "$tmp_dir"
+    
+    # Wait for user to press a key before returning to the menu
+    read -n 1 -s -r -p "Press any key to continue..."
 }
 
-# NEW FUNCTION: List All Users
+# Function: List All Users
 list_all_users() {
+    clear_terminal
     echo "=== TAK Server Users ==="
     
     # Check if the base directory exists
     if [ ! -d "$base_dir" ]; then
         echo "No data package directory found at $base_dir"
+        read -n 1 -s -r -p "Press any key to continue..."
         return
     fi
     
@@ -518,9 +569,13 @@ list_all_users() {
             echo "  $((i+1)). ${iphone_users[$i]}"
         done
     fi
+    
+    # Wait for user to press a key before returning to the menu
+    echo ""
+    read -n 1 -s -r -p "Press any key to continue..."
 }
 
-# NEW FUNCTION: Revoke iPhone Certificate - Correct approach based on exact specification
+# Function: Revoke iPhone Certificate
 revoke_iphone_certificate() {
     local client="$1"
     local ca_cert="$2"
@@ -537,7 +592,189 @@ EOT
     
     return $?
 }
+
+# Function to manage group membership
+manage_group_membership() {
+    clear_terminal
+    echo "=== Group Membership Management ==="
+    echo "1. Return to main menu"
+    echo "2. Add user to group"
+    echo "3. Remove user from group"
+    echo "4. See user group membership"
+    echo ""
+    read -p "Enter your choice [1-4]: " group_choice
+
+    case $group_choice in
+        1)
+            # Return to main menu
+            return
+            ;;
+        2)
+            # Add user to group
+            add_user_to_group
+            ;;
+        3)
+            # Remove user from group
+            remove_user_from_group
+            ;;
+        4)
+            # See user group membership
+            view_user_group_membership
+            ;;
+        *)
+            echo "Invalid option. Please select 1-4."
+            read -n 1 -s -r -p "Press any key to continue..."
+            ;;
+    esac
+}
+
+# Function to add a user to a group
+add_user_to_group() {
+    clear_terminal
+    echo "=== Add User to Group ==="
+    
+    # Prompt for username
+    read -p "Enter the username: " username
+    if [ -z "$username" ]; then
+        echo "Error: Username cannot be empty."
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    # Prompt for group name
+    read -p "Enter the group name: " group_name
+    if [ -z "$group_name" ]; then
+        echo "Error: Group name cannot be empty."
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    # Ask which type of group permission to add
+    echo "Select the type of group permission:"
+    echo "1. Full access (read and write)"
+    echo "2. Write-only access"
+    echo "3. Read-only access"
+    read -p "Enter your choice [1-3]: " perm_choice
+    
+    case $perm_choice in
+        1)
+            # Full access (read and write)
+            echo "Adding user '$username' to group '$group_name' with full access..."
+            sudo java -jar /opt/tak/UserManager.jar usermod -g "$group_name" -a "$username"
+            ;;
+        2)
+            # Write-only access
+            echo "Adding user '$username' to group '$group_name' with write-only access..."
+            sudo java -jar /opt/tak/UserManager.jar usermod -ig "$group_name" -a "$username"
+            ;;
+        3)
+            # Read-only access
+            echo "Adding user '$username' to group '$group_name' with read-only access..."
+            sudo java -jar /opt/tak/UserManager.jar usermod -og "$group_name" -a "$username"
+            ;;
+        *)
+            echo "Invalid option. Operation cancelled."
+            read -n 1 -s -r -p "Press any key to continue..."
+            return
+            ;;
+    esac
+    
+    if [ $? -eq 0 ]; then
+        echo "Successfully added user to group."
+    else
+        echo "Error: Failed to add user to group."
+    fi
+    
+    read -n 1 -s -r -p "Press any key to continue..."
+}
+
+# Function to remove a user from a group
+remove_user_from_group() {
+    clear_terminal
+    echo "=== Remove User from Group ==="
+    
+    # Prompt for username
+    read -p "Enter the username: " username
+    if [ -z "$username" ]; then
+        echo "Error: Username cannot be empty."
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    # Prompt for group name
+    read -p "Enter the group name: " group_name
+    if [ -z "$group_name" ]; then
+        echo "Error: Group name cannot be empty."
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    # Ask which type of group permission to remove
+    echo "Select the type of group permission to remove:"
+    echo "1. Full access (read and write)"
+    echo "2. Write-only access"
+    echo "3. Read-only access"
+    read -p "Enter your choice [1-3]: " perm_choice
+    
+    case $perm_choice in
+        1)
+            # Full access (read and write)
+            echo "Removing user '$username' from group '$group_name' (full access)..."
+            sudo java -jar /opt/tak/UserManager.jar usermod -g "$group_name" -r "$username"
+            ;;
+        2)
+            # Write-only access
+            echo "Removing user '$username' from group '$group_name' (write-only access)..."
+            sudo java -jar /opt/tak/UserManager.jar usermod -ig "$group_name" -r "$username"
+            ;;
+        3)
+            # Read-only access
+            echo "Removing user '$username' from group '$group_name' (read-only access)..."
+            sudo java -jar /opt/tak/UserManager.jar usermod -og "$group_name" -r "$username"
+            ;;
+        *)
+            echo "Invalid option. Operation cancelled."
+            read -n 1 -s -r -p "Press any key to continue..."
+            return
+            ;;
+    esac
+    
+    if [ $? -eq 0 ]; then
+        echo "Successfully removed user from group."
+    else
+        echo "Error: Failed to remove user from group."
+    fi
+    
+    read -n 1 -s -r -p "Press any key to continue..."
+}
+
+# Function to view user group membership
+view_user_group_membership() {
+    clear_terminal
+    echo "=== View User Group Membership ==="
+    
+    # Prompt for username
+    read -p "Enter the username: " username
+    if [ -z "$username" ]; then
+        echo "Error: Username cannot be empty."
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    echo "Retrieving group membership for user '$username'..."
+    sudo java -jar /opt/tak/UserManager.jar usermod -s "$username"
+    
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to retrieve user information."
+    fi
+    
+    # Wait for user to press enter before returning to menu
+    read -p "Press Enter to continue..."
+}
+
+# Function: Remove User
 remove_user() {
+    clear_terminal
     echo "=== Remove User ==="
     
     # Arrays to store different types of users
@@ -592,6 +829,7 @@ remove_user() {
     # Check if there are any users to remove
     if [ ${#all_users[@]} -eq 0 ]; then
         echo "No users found to remove."
+        read -n 1 -s -r -p "Press any key to continue..."
         return
     fi
     
@@ -601,6 +839,7 @@ remove_user() {
     select user_to_remove in "${all_users[@]}" "Cancel"; do
         if [ "$REPLY" -eq "$((${#all_users[@]}+1))" ] || [ "$REPLY" -eq 0 ]; then
             echo "Operation cancelled."
+            read -n 1 -s -r -p "Press any key to continue..."
             return
         fi
         
@@ -677,6 +916,7 @@ remove_user() {
                     echo "Removal cancelled."
                 fi
             fi
+            read -n 1 -s -r -p "Press any key to continue..."
             break
         else
             echo "Invalid selection."
@@ -697,12 +937,13 @@ while true; do
     echo "1. Create ITAK Configuration"
     echo "2. Create ATAK Configuration"
     echo "3. Configure TAK Server Settings"
-    echo "4. Show Current Configuration"
+    echo "4. Show Current ServerConfiguration"
     echo "5. List Current Users"
     echo "6. Remove User"
-    echo "7. Exit"
+    echo "7. Manage Group Membership"
+    echo "8. Exit"
     echo ""
-    read -p "Enter your choice [1-7]: " main_choice
+    read -p "Enter your choice [1-8]: " main_choice
 
     case $main_choice in
       1)
@@ -757,6 +998,11 @@ while true; do
         
         # Create preferences-only zip file
         create_zip "-pref"
+        
+        # Fix ownership for the created folder and zip files
+        fix_ownership "$subfolder"
+        fix_ownership "${subfolder}.zip"
+        fix_ownership "${subfolder}-pref.zip"
         ;;
         
       3)
@@ -780,12 +1026,17 @@ while true; do
         ;;
         
       7)
+        # Manage group membership
+        manage_group_membership
+        ;;
+
+      8)
         echo "Exiting User Configuration Tool."
         exit 0
         ;;
         
       *)
-        echo "Invalid option. Please select 1-7."
+        echo "Invalid option. Please select 1-8."
         ;;
     esac
 done
