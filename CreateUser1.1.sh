@@ -660,17 +660,17 @@ add_user_to_group() {
         1)
             # Full access (read and write)
             echo "Adding user '$username' to group '$group_name' with full access..."
-            sudo java -jar /opt/tak/UserManager.jar usermod -g "$group_name" -a "$username"
+            sudo java -jar /opt/tak/utils/UserManager.jar usermod -g "$group_name" -a "$username"
             ;;
         2)
             # Write-only access
             echo "Adding user '$username' to group '$group_name' with write-only access..."
-            sudo java -jar /opt/tak/UserManager.jar usermod -ig "$group_name" -a "$username"
+            sudo java -jar /opt/tak/utils/UserManager.jar usermod -ig "$group_name" -a "$username"
             ;;
         3)
             # Read-only access
             echo "Adding user '$username' to group '$group_name' with read-only access..."
-            sudo java -jar /opt/tak/UserManager.jar usermod -og "$group_name" -a "$username"
+            sudo java -jar /opt/tak/utils/UserManager.jar usermod -og "$group_name" -a "$username"
             ;;
         *)
             echo "Invalid option. Operation cancelled."
@@ -720,17 +720,17 @@ remove_user_from_group() {
         1)
             # Full access (read and write)
             echo "Removing user '$username' from group '$group_name' (full access)..."
-            sudo java -jar /opt/tak/UserManager.jar usermod -g "$group_name" -r "$username"
+            sudo java -jar /opt/tak/utils/UserManager.jar usermod -g "$group_name" -r "$username"
             ;;
         2)
             # Write-only access
             echo "Removing user '$username' from group '$group_name' (write-only access)..."
-            sudo java -jar /opt/tak/UserManager.jar usermod -ig "$group_name" -r "$username"
+            sudo java -jar /opt/tak/utils/UserManager.jar usermod -ig "$group_name" -r "$username"
             ;;
         3)
             # Read-only access
             echo "Removing user '$username' from group '$group_name' (read-only access)..."
-            sudo java -jar /opt/tak/UserManager.jar usermod -og "$group_name" -r "$username"
+            sudo java -jar /opt/tak/utils/UserManager.jar usermod -og "$group_name" -r "$username"
             ;;
         *)
             echo "Invalid option. Operation cancelled."
@@ -762,7 +762,7 @@ view_user_group_membership() {
     fi
     
     echo "Retrieving group membership for user '$username'..."
-    sudo java -jar /opt/tak/UserManager.jar usermod -s "$username"
+    sudo java -jar /opt/tak/utils/UserManager.jar usermod -s "$username"
     
     if [ $? -ne 0 ]; then
         echo "Error: Failed to retrieve user information."
