@@ -651,16 +651,72 @@ manage_group_membership() {
     esac
 }
 
+# Function to get user list from certificates
+get_tak_users() {
+    # Define UserManager.jar location
+    user_manager="/opt/tak/utils/UserManager.jar"
+    
+    # Check if the file exists
+    if [ ! -f "$user_manager" ]; then
+        echo "Error: UserManager.jar not found at $user_manager"
+        return 1
+    fi
+    
+    # Retrieve all users and parse the output
+    users_output=$(sudo java -jar "$user_manager" certls | grep -v "List certs from truststore\|^$")
+    
+    # Create an array of users
+    mapfile -t users_array <<< "$users_output"
+    
+    # Return the array
+    echo "${users_array[@]}"
+}
+
+# Function to select from list of users
+select_user_from_list() {
+    clear_terminal
+    echo "=== Select User ==="
+    
+    # Get list of users
+    users=($(get_tak_users))
+    
+    # Check if we got any users
+    if [ ${#users[@]} -eq 0 ]; then
+        echo "No users found in the system."
+        read -n 1 -s -r -p "Press any key to continue..."
+        return ""
+    fi
+    
+    # Display list of users
+    echo "Available users:"
+    PS3="Enter user number (or 0 to cancel): "
+    select selected_user in "${users[@]}" "Cancel"; do
+        if [ "$REPLY" -eq "0" ] || [ "$REPLY" -eq "$((${#users[@]} + 1))" ]; then
+            echo "Operation cancelled."
+            return ""
+        fi
+        
+        if [ "$REPLY" -gt 0 ] && [ "$REPLY" -le "${#users[@]}" ]; then
+            echo "Selected user: $selected_user"
+            echo "$selected_user"
+            break
+        else
+            echo "Invalid selection. Please try again."
+        fi
+    done
+}
+
 # Function to add a user to a group
 add_user_to_group() {
     clear_terminal
     echo "=== Add User to Group ==="
     
-    # Prompt for username
-    read -p "Enter the username: " username
+    # Get username from list
+    echo "Select a user to add to a group:"
+    username=$(select_user_from_list)
+    
+    # Check if user selection was cancelled
     if [ -z "$username" ]; then
-        echo "Error: Username cannot be empty."
-        read -n 1 -s -r -p "Press any key to continue..."
         return
     fi
     
@@ -693,17 +749,17 @@ add_user_to_group() {
         1)
             # Full access (read and write)
             echo "Adding user '$username' to group '$group_name' with full access..."
-            sudo java -jar "$user_manager" usermod -g "$group_name" -a "$username"
+            sudo java -jar "$user_manager" certmod -g "$group_name" -a "$username"
             ;;
         2)
             # Write-only access
             echo "Adding user '$username' to group '$group_name' with write-only access..."
-            sudo java -jar "$user_manager" usermod -ig "$group_name" -a "$username"
+            sudo java -jar "$user_manager" certmod -ig "$group_name" -a "$username"
             ;;
         3)
             # Read-only access
             echo "Adding user '$username' to group '$group_name' with read-only access..."
-            sudo java -jar "$user_manager" usermod -og "$group_name" -a "$username"
+            sudo java -jar "$user_manager" certmod -og "$group_name" -a "$username"
             ;;
         *)
             echo "Invalid option. Operation cancelled."
@@ -720,17 +776,19 @@ add_user_to_group() {
     
     read -n 1 -s -r -p "Press any key to continue..."
 }
+}
 
 # Function to remove a user from a group
 remove_user_from_group() {
     clear_terminal
     echo "=== Remove User from Group ==="
     
-    # Prompt for username
-    read -p "Enter the username: " username
+    # Get username from list
+    echo "Select a user to remove from a group:"
+    username=$(select_user_from_list)
+    
+    # Check if user selection was cancelled
     if [ -z "$username" ]; then
-        echo "Error: Username cannot be empty."
-        read -n 1 -s -r -p "Press any key to continue..."
         return
     fi
     
@@ -763,17 +821,17 @@ remove_user_from_group() {
         1)
             # Full access (read and write)
             echo "Removing user '$username' from group '$group_name' (full access)..."
-            sudo java -jar "$user_manager" usermod -g "$group_name" -r "$username"
+            sudo java -jar "$user_manager" certmod -g "$group_name" -r "$username"
             ;;
         2)
             # Write-only access
             echo "Removing user '$username' from group '$group_name' (write-only access)..."
-            sudo java -jar "$user_manager" usermod -ig "$group_name" -r "$username"
+            sudo java -jar "$user_manager" certmod -ig "$group_name" -r "$username"
             ;;
         3)
             # Read-only access
             echo "Removing user '$username' from group '$group_name' (read-only access)..."
-            sudo java -jar "$user_manager" usermod -og "$group_name" -r "$username"
+            sudo java -jar "$user_manager" certmod -og "$group_name" -r "$username"
             ;;
         *)
             echo "Invalid option. Operation cancelled."
@@ -796,11 +854,12 @@ view_user_group_membership() {
     clear_terminal
     echo "=== View User Group Membership ==="
     
-    # Prompt for username
-    read -p "Enter the username: " username
+    # Get username from list
+    echo "Select a user to view group membership:"
+    username=$(select_user_from_list)
+    
+    # Check if user selection was cancelled
     if [ -z "$username" ]; then
-        echo "Error: Username cannot be empty."
-        read -n 1 -s -r -p "Press any key to continue..."
         return
     fi
     
@@ -815,7 +874,7 @@ view_user_group_membership() {
     fi
     
     echo "Retrieving group membership for user '$username'..."
-    sudo java -jar "$user_manager" usermod -s "$username"
+    sudo java -jar "$user_manager" certmod -s "$username"
     
     if [ $? -ne 0 ]; then
         echo "Error: Failed to retrieve user information."
