@@ -776,7 +776,6 @@ add_user_to_group() {
     
     read -n 1 -s -r -p "Press any key to continue..."
 }
-}
 
 # Function to remove a user from a group
 remove_user_from_group() {
