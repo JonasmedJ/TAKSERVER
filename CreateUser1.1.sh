@@ -397,6 +397,14 @@ display_current_config() {
 # Function to create iPhone configuration (simplified)
 create_itak_configuration() {
     clear_terminal
+    
+    # Check if we have all required configuration values
+    if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
+        echo "Missing configuration values. Please configure your TAK Server settings first."
+        read -n 1 -s -r -p "Press any key to continue..."
+        configure_variables
+    fi
+    
     # Create temporary directory for files
     tmp_dir="$(mktemp -d)"
     
@@ -407,8 +415,17 @@ create_itak_configuration() {
     if [ -z "$itak_username" ]; then
         echo "Error: No username provided."
         rm -rf "$tmp_dir"
-        exit 1
+        return
     fi
+    
+    # Show current configuration being used
+    echo ""
+    echo "Using the following configuration:"
+    echo "- Server Name: $TAKServer_Name"
+    echo "- Connection: $Connection_Name:8089:ssl"
+    echo "- CA Certificate: $CACert"
+    echo "- Password: $CA_Password"
+    echo ""
     
     # Create certificate with tak user
     echo "Creating certificate for iTAK user: $itak_username"
@@ -421,7 +438,8 @@ EOT
     if [ $? -ne 0 ]; then
         echo "Error: Certificate creation failed"
         rm -rf "$tmp_dir"
-        exit 1
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
     fi
 
     # Check if certificate was created
@@ -429,14 +447,16 @@ EOT
     if [ ! -f "$client_cert" ]; then
         echo "Error: Certificate file not found at $client_cert"
         rm -rf "$tmp_dir"
-        exit 1
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
     fi
     
     # Copy client certificate
     cp "$client_cert" "$tmp_dir/" || {
         echo "Error: Failed to copy client certificate"
         rm -rf "$tmp_dir"
-        exit 1
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
     }
     
     # Search in Documents directory by default
@@ -447,14 +467,16 @@ EOT
     if [[ -z "$truststore_file" ]]; then
         echo "No Truststore file found in $search_dir."
         rm -rf "$tmp_dir"
-        exit 1
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
     fi
     
     # Copy truststore
     cp "$truststore_file" "$tmp_dir/$CACert.p12" || {
         echo "Error: Failed to copy truststore certificate"
         rm -rf "$tmp_dir"
-        exit 1
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
     }
     
     # Create config.pref
@@ -473,6 +495,7 @@ EOT
     <entry key="caPassword" class="class java.lang.String">$CA_Password</entry>
     <entry key="clientPassword" class="class java.lang.String">$CA_Password</entry>
     <entry key="certificateLocation" class="class java.lang.String">cert/${itak_username}.p12</entry>
+    <entry key="locationCallsign" class="class java.lang.String">${itak_username}</entry>
   </preference>
 </preferences>
 EOL
@@ -656,21 +679,31 @@ add_user_to_group() {
     echo "3. Read-only access"
     read -p "Enter your choice [1-3]: " perm_choice
     
+    # Define UserManager.jar location
+    user_manager="/opt/tak/utils/UserManager.jar"
+    
+    # Check if the file exists
+    if [ ! -f "$user_manager" ]; then
+        echo "Error: UserManager.jar not found at $user_manager"
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
     case $perm_choice in
         1)
             # Full access (read and write)
             echo "Adding user '$username' to group '$group_name' with full access..."
-            sudo java -jar /opt/tak/utils/UserManager.jar usermod -g "$group_name" -a "$username"
+            sudo java -jar "$user_manager" usermod -g "$group_name" -a "$username"
             ;;
         2)
             # Write-only access
             echo "Adding user '$username' to group '$group_name' with write-only access..."
-            sudo java -jar /opt/tak/utils/UserManager.jar usermod -ig "$group_name" -a "$username"
+            sudo java -jar "$user_manager" usermod -ig "$group_name" -a "$username"
             ;;
         3)
             # Read-only access
             echo "Adding user '$username' to group '$group_name' with read-only access..."
-            sudo java -jar /opt/tak/utils/UserManager.jar usermod -og "$group_name" -a "$username"
+            sudo java -jar "$user_manager" usermod -og "$group_name" -a "$username"
             ;;
         *)
             echo "Invalid option. Operation cancelled."
@@ -716,21 +749,31 @@ remove_user_from_group() {
     echo "3. Read-only access"
     read -p "Enter your choice [1-3]: " perm_choice
     
+    # Define UserManager.jar location
+    user_manager="/opt/tak/utils/UserManager.jar"
+    
+    # Check if the file exists
+    if [ ! -f "$user_manager" ]; then
+        echo "Error: UserManager.jar not found at $user_manager"
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
     case $perm_choice in
         1)
             # Full access (read and write)
             echo "Removing user '$username' from group '$group_name' (full access)..."
-            sudo java -jar /opt/tak/utils/UserManager.jar usermod -g "$group_name" -r "$username"
+            sudo java -jar "$user_manager" usermod -g "$group_name" -r "$username"
             ;;
         2)
             # Write-only access
             echo "Removing user '$username' from group '$group_name' (write-only access)..."
-            sudo java -jar /opt/tak/utils/UserManager.jar usermod -ig "$group_name" -r "$username"
+            sudo java -jar "$user_manager" usermod -ig "$group_name" -r "$username"
             ;;
         3)
             # Read-only access
             echo "Removing user '$username' from group '$group_name' (read-only access)..."
-            sudo java -jar /opt/tak/utils/UserManager.jar usermod -og "$group_name" -r "$username"
+            sudo java -jar "$user_manager" usermod -og "$group_name" -r "$username"
             ;;
         *)
             echo "Invalid option. Operation cancelled."
@@ -761,8 +804,18 @@ view_user_group_membership() {
         return
     fi
     
+    # Define UserManager.jar location
+    user_manager="/opt/tak/utils/UserManager.jar"
+    
+    # Check if the file exists
+    if [ ! -f "$user_manager" ]; then
+        echo "Error: UserManager.jar not found at $user_manager"
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
     echo "Retrieving group membership for user '$username'..."
-    sudo java -jar /opt/tak/utils/UserManager.jar usermod -s "$username"
+    sudo java -jar "$user_manager" usermod -s "$username"
     
     if [ $? -ne 0 ]; then
         echo "Error: Failed to retrieve user information."
@@ -929,15 +982,23 @@ remove_user() {
 # Trap on ERR for cleanup
 trap cleanup ERR
 
+# Display welcome message at start
+clear_terminal
+display_welcome
+
+# Load configuration on start
+load_configuration_on_start
+
 while true; do
-    echo ""
+    # Clear terminal and show menu
+    clear_terminal
     echo "TAK Server User Configuration Tool"
     echo "==================================="
     echo "Please select an option:"
     echo "1. Create ITAK Configuration"
     echo "2. Create ATAK Configuration"
     echo "3. Configure TAK Server Settings"
-    echo "4. Show Current ServerConfiguration"
+    echo "4. Show Current Server Configuration"
     echo "5. List Current Users"
     echo "6. Remove User"
     echo "7. Manage Group Membership"
@@ -947,15 +1008,10 @@ while true; do
 
     case $main_choice in
       1)
+        clear_terminal
         echo "Running ITAK user creation."
         
-        # Check if we have all required configuration values
-        if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
-            echo "Missing configuration values. Please configure your TAK Server settings first."
-            configure_variables
-        fi
-        
-        # Run the simplified iTAK configuration process
+        # Run the simplified iTAK configuration process (configuration check is now inside the function)
         create_itak_configuration
         ;;
 
@@ -1003,6 +1059,9 @@ while true; do
         fix_ownership "$subfolder"
         fix_ownership "${subfolder}.zip"
         fix_ownership "${subfolder}-pref.zip"
+        
+        # Wait for user to press a key before returning to the menu
+        read -n 1 -s -r -p "Press any key to continue..."
         ;;
         
       3)
@@ -1031,12 +1090,14 @@ while true; do
         ;;
 
       8)
+        clear_terminal
         echo "Exiting User Configuration Tool."
         exit 0
         ;;
         
       *)
         echo "Invalid option. Please select 1-8."
+        read -n 1 -s -r -p "Press any key to continue..."
         ;;
     esac
 done
