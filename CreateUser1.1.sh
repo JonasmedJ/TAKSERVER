@@ -1580,103 +1580,71 @@ while true; do
     echo "5. List Current Users"
     echo "6. Remove User"
     echo "7. Manage Group Membership"
-    echo "8. Exit"
+    echo "8. Modify iTAK User Groups"
+    echo "9. Exit"
     echo ""
-    read -p "Enter your choice [1-8]: " main_choice
+    read -p "Enter your choice [1-9]: " main_choice
 
-    case $main_choice in
-      1)
-        clear_terminal
-        echo "Running ITAK user creation."
-        
-        # Run the simplified iTAK configuration process (configuration check is now inside the function)
-        create_itak_configuration
-        ;;
-
-      2)
-        echo "Running ATAK user creation."
-        platform="android"
-        
-        # Check if we have all required configuration values
-        if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
-            echo "Missing configuration values. Please configure your TAK Server settings first."
+    case "$main_choice" in
+        "1")
+            clear_terminal
+            echo "Running ITAK user creation."
+            create_itak_configuration
+            ;;
+        "2")
+            echo "Running ATAK user creation."
+            platform="android"
+            
+            # Check if we have all required configuration values
+            if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
+                echo "Missing configuration values. Please configure your TAK Server settings first."
+                configure_variables
+            fi
+            
+            create_data_package_subfolder
+            setup_truststore
+            get_user_details
+            download_map_files
+            create_android_config
+            create_full_manifest
+            create_zip ""
+            create_prefs_only_config
+            create_pref_manifest
+            create_zip "-pref"
+            
+            fix_ownership "$subfolder"
+            fix_ownership "${subfolder}.zip"
+            fix_ownership "${subfolder}-pref.zip"
+            
+            read -n 1 -s -r -p "Press any key to continue..."
+            ;;
+        "3")
             configure_variables
-        fi
-        
-        # Create folder structure
-        create_data_package_subfolder
-        
-        # Setup truststore
-        setup_truststore
-        
-        # Get user details
-        get_user_details
-        
-        # Download map files
-        download_map_files
-        
-        # Create full Android configuration
-        create_android_config
-        
-        # Create full manifest with maps
-        create_full_manifest
-        
-        # Create full zip file
-        create_zip ""
-        
-        # Now create preferences-only configuration
-        create_prefs_only_config
-        
-        # Create preferences-only manifest with maps
-        create_pref_manifest
-        
-        # Create preferences-only zip file
-        create_zip "-pref"
-        
-        # Fix ownership for the created folder and zip files
-        fix_ownership "$subfolder"
-        fix_ownership "${subfolder}.zip"
-        fix_ownership "${subfolder}-pref.zip"
-        
-        # Wait for user to press a key before returning to the menu
-        read -n 1 -s -r -p "Press any key to continue..."
-        ;;
-        
-      3)
-        # Configure TAK Server settings
-        configure_variables
-        ;;
-        
-      4)
-        # Display current configuration
-        display_current_config
-        ;;
-
-      5)
-        # List all users
-        list_all_users
-        ;;
-        
-      6)
-        # Remove user
-        remove_user
-        ;;
-        
-      7)
-        # Manage group membership
-        manage_group_membership
-        ;;
-
-      8)
-        clear_terminal
-        echo "Exiting User Configuration Tool."
-        exit 0
-        ;;
-        
-      *)
-        echo "Invalid option. Please select 1-8."
-        read -n 1 -s -r -p "Press any key to continue..."
-        ;;
+            ;;
+        "4")
+            display_current_config
+            ;;
+        "5")
+            list_all_users
+            ;;
+        "6")
+            remove_user
+            ;;
+        "7")
+            manage_group_membership
+            ;;
+        "8")
+            modify_itak_groups
+            ;;
+        "9")
+            clear_terminal
+            echo "Exiting User Configuration Tool."
+            exit 0
+            ;;
+        *)
+            echo "Invalid option. Please select 1-9."
+            read -n 1 -s -r -p "Press any key to continue..."
+            ;;
     esac
 done
 
