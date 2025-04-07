@@ -855,6 +855,7 @@ remove_user_from_group() {
 }
 
 # Function to remove a user from a group
+# Function to remove a user from a group
 remove_user_from_group() {
     clear_terminal
     echo "=== Remove User from Group ==="
@@ -958,6 +959,131 @@ view_user_group_membership() {
     
     # Wait for user to press enter before returning to menu
     read -p "Press Enter to continue..."
+}
+
+# Function to modify group memberships specifically for iTAK users
+modify_itak_groups() {
+    clear_terminal
+    echo "=== Modify iTAK User Groups ==="
+    
+    # Find iPhone users (-ios.zip)
+    iphone_users=()
+    
+    # Find all iPhone user zip files
+    for zip_file in "$base_dir"/*-ios.zip; do
+        if [ -f "$zip_file" ]; then
+            zip_name=$(basename "$zip_file" -ios.zip)
+            iphone_users+=("$zip_name")
+        fi
+    done
+    
+    # Check if there are any iPhone users
+    if [ ${#iphone_users[@]} -eq 0 ]; then
+        echo "No iPhone (iTAK) users found."
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    # Display menu of iPhone users
+    echo "Select an iTAK user to modify groups:"
+    PS3="Enter number (or 0 to cancel): "
+    select user_to_modify in "${iphone_users[@]}" "Cancel"; do
+        if [ "$REPLY" -eq "$((${#iphone_users[@]}+1))" ] || [ "$REPLY" -eq 0 ]; then
+            echo "Operation cancelled."
+            read -n 1 -s -r -p "Press any key to continue..."
+            return
+        fi
+        
+        if [ "$REPLY" -gt 0 ] && [ "$REPLY" -le "${#iphone_users[@]}" ]; then
+            selected_user="${iphone_users[$((REPLY-1))]}"
+            
+            echo "You selected: $selected_user"
+            
+            # Display the current group membership
+            echo "Current group membership for $selected_user:"
+            user_manager="/opt/tak/utils/UserManager.jar"
+            
+            # Show current status
+            sudo java -jar "$user_manager" certmod -s "$selected_user"
+            
+            # Display group modification options
+            echo ""
+            echo "Group Modification Options:"
+            echo "1. Add user to group (full access)"
+            echo "2. Add user to group (write-only access)"
+            echo "3. Add user to group (read-only access)"
+            echo "4. Remove user from group (full access)"
+            echo "5. Remove user from group (write-only access)"
+            echo "6. Remove user from group (read-only access)"
+            echo "7. Cancel"
+            echo ""
+            read -p "Enter your choice [1-7]: " mod_choice
+            
+            # If cancel is selected
+            if [ "$mod_choice" -eq 7 ]; then
+                echo "Operation cancelled."
+                read -n 1 -s -r -p "Press any key to continue..."
+                break
+            fi
+            
+            # Get group name
+            read -p "Enter the group name: " group_name
+            if [ -z "$group_name" ]; then
+                echo "Error: Group name cannot be empty."
+                read -n 1 -s -r -p "Press any key to continue..."
+                break
+            fi
+            
+            # Perform the selected action
+            case $mod_choice in
+                1)
+                    # Add user to group (full access)
+                    echo "Adding user '$selected_user' to group '$group_name' with full access..."
+                    sudo java -jar "$user_manager" certmod -g "$group_name" -a "$selected_user"
+                    ;;
+                2)
+                    # Add user to group (write-only access)
+                    echo "Adding user '$selected_user' to group '$group_name' with write-only access..."
+                    sudo java -jar "$user_manager" certmod -ig "$group_name" -a "$selected_user"
+                    ;;
+                3)
+                    # Add user to group (read-only access)
+                    echo "Adding user '$selected_user' to group '$group_name' with read-only access..."
+                    sudo java -jar "$user_manager" certmod -og "$group_name" -a "$selected_user"
+                    ;;
+                4)
+                    # Remove user from group (full access)
+                    echo "Removing user '$selected_user' from group '$group_name' (full access)..."
+                    sudo java -jar "$user_manager" certmod -g "$group_name" -r "$selected_user"
+                    ;;
+                5)
+                    # Remove user from group (write-only access)
+                    echo "Removing user '$selected_user' from group '$group_name' (write-only access)..."
+                    sudo java -jar "$user_manager" certmod -ig "$group_name" -r "$selected_user"
+                    ;;
+                6)
+                    # Remove user from group (read-only access)
+                    echo "Removing user '$selected_user' from group '$group_name' (read-only access)..."
+                    sudo java -jar "$user_manager" certmod -og "$group_name" -r "$selected_user"
+                    ;;
+                *)
+                    echo "Invalid option selected."
+                    ;;
+            esac
+            
+            # Show updated status
+            if [ "$mod_choice" -ge 1 ] && [ "$mod_choice" -le 6 ]; then
+                echo ""
+                echo "Updated group membership for $selected_user:"
+                sudo java -jar "$user_manager" certmod -s "$selected_user"
+            fi
+            
+            read -n 1 -s -r -p "Press any key to continue..."
+            break
+        else
+            echo "Invalid selection."
+        fi
+    done
 }
 
 # Function: Remove User
@@ -1142,66 +1268,104 @@ while true; do
     echo ""
     read -p "Enter your choice [1-9]: " main_choice
 
-    case "$main_choice" in
-        "1")
-            clear_terminal
-            echo "Running ITAK user creation."
-            create_itak_configuration
-            ;;
-        "2")
-            echo "Running ATAK user creation."
-            platform="android"
-            
-            # Check if we have all required configuration values
-            if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
-                echo "Missing configuration values. Please configure your TAK Server settings first."
-                configure_variables
-            fi
-            
-            create_data_package_subfolder
-            setup_truststore
-            get_user_details
-            download_map_files
-            create_android_config
-            create_full_manifest
-            create_zip ""
-            create_prefs_only_config
-            create_pref_manifest
-            create_zip "-pref"
-            
-            fix_ownership "$subfolder"
-            fix_ownership "${subfolder}.zip"
-            fix_ownership "${subfolder}-pref.zip"
-            
-            read -n 1 -s -r -p "Press any key to continue..."
-            ;;
-        "3")
+    case $main_choice in
+      1)
+        clear_terminal
+        echo "Running ITAK user creation."
+        
+        # Run the simplified iTAK configuration process (configuration check is now inside the function)
+        create_itak_configuration
+        ;;
+
+      2)
+        echo "Running ATAK user creation."
+        platform="android"
+        
+        # Check if we have all required configuration values
+        if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
+            echo "Missing configuration values. Please configure your TAK Server settings first."
             configure_variables
-            ;;
-        "4")
-            display_current_config
-            ;;
-        "5")
-            list_all_users
-            ;;
-        "6")
-            remove_user
-            ;;
-        "7")
-            manage_group_membership
-            ;;
-        "8")
-            modify_itak_groups
-            ;;
-        "9")
-            clear_terminal
-            echo "Exiting User Configuration Tool."
-            exit 0
-            ;;
-        *)
-            echo "Invalid option. Please select 1-9."
-            read -n 1 -s -r -p "Press any key to continue..."
-            ;;
+        fi
+        
+        # Create folder structure
+        create_data_package_subfolder
+        
+        # Setup truststore
+        setup_truststore
+        
+        # Get user details
+        get_user_details
+        
+        # Download map files
+        download_map_files
+        
+        # Create full Android configuration
+        create_android_config
+        
+        # Create full manifest with maps
+        create_full_manifest
+        
+        # Create full zip file
+        create_zip ""
+        
+        # Now create preferences-only configuration
+        create_prefs_only_config
+        
+        # Create preferences-only manifest with maps
+        create_pref_manifest
+        
+        # Create preferences-only zip file
+        create_zip "-pref"
+        
+        # Fix ownership for the created folder and zip files
+        fix_ownership "$subfolder"
+        fix_ownership "${subfolder}.zip"
+        fix_ownership "${subfolder}-pref.zip"
+        
+        # Wait for user to press a key before returning to the menu
+        read -n 1 -s -r -p "Press any key to continue..."
+        ;;
+        
+      3)
+        # Configure TAK Server settings
+        configure_variables
+        ;;
+        
+      4)
+        # Display current configuration
+        display_current_config
+        ;;
+
+      5)
+        # List all users
+        list_all_users
+        ;;
+        
+      6)
+        # Remove user
+        remove_user
+        ;;
+        
+      7)
+        # Manage group membership
+        manage_group_membership
+        ;;
+        
+      8)
+        # Modify iTAK user groups
+        modify_itak_groups
+        ;;
+
+      9)
+        clear_terminal
+        echo "Exiting User Configuration Tool."
+        exit 0
+        ;;
+        
+      *)
+        echo "Invalid option. Please select 1-9."
+        read -n 1 -s -r -p "Press any key to continue..."
+        ;;
     esac
 done
 
