@@ -729,7 +729,7 @@ modify_itak_groups() {
                 break
             fi
             
-            # Display the current group membership - Use certsum for status check instead of certmod -s
+            # Display the current group membership
             echo "Current group membership for $selected_user:"
             sudo java -jar "$user_manager" certmod -s "$cert_path"
             
