@@ -679,6 +679,7 @@ get_tak_users() {
 }
 
 # Function to modify group memberships specifically for iTAK users
+# Function to modify group memberships specifically for iTAK users
 modify_itak_groups() {
     clear_terminal
     echo "=== Modify iTAK User Groups ==="
@@ -760,9 +761,9 @@ modify_itak_groups() {
             # Perform the selected action
             case $mod_choice in
                 1)
-                    # Add user to group
+                    # Add user to group using append option (-a)
                     echo "Adding user '$selected_user' to group '$group_name'..."
-                    sudo java -jar "$user_manager" certmod -g "$group_name" "$cert_path"
+                    sudo java -jar "$user_manager" certmod -a -g "$group_name" "$cert_path"
                     ;;
                 2)
                     # Remove user from group
