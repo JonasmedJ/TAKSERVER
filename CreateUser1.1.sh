@@ -679,7 +679,6 @@ get_tak_users() {
 }
 
 # Function to modify group memberships specifically for iTAK users
-# Function to modify group memberships specifically for iTAK users
 modify_itak_groups() {
     clear_terminal
     echo "=== Modify iTAK User Groups ==="
@@ -732,7 +731,13 @@ modify_itak_groups() {
             
             # Display the current group membership
             echo "Current group membership for $selected_user:"
-            sudo java -jar "$user_manager" certmod -s "$cert_path"
+            group_output=$(sudo java -jar "$user_manager" certmod -s "$cert_path" 2>&1)
+            echo "$group_output"
+            
+            # Check if the error message about user not found is displayed
+            if echo "$group_output" | grep -q "Could not find a user with the name.*extracted from the supplied certificate"; then
+                echo "This simply means that the user doesn't have any groups added."
+            fi
             
             # Display group modification options
             echo ""
@@ -779,7 +784,13 @@ modify_itak_groups() {
             if [ "$mod_choice" -eq 1 ] || [ "$mod_choice" -eq 2 ]; then
                 echo ""
                 echo "Updated group membership for $selected_user:"
-                sudo java -jar "$user_manager" certmod -s "$cert_path"
+                updated_output=$(sudo java -jar "$user_manager" certmod -s "$cert_path" 2>&1)
+                echo "$updated_output"
+                
+                # Check again if the error message about user not found is displayed
+                if echo "$updated_output" | grep -q "Could not find a user with the name.*extracted from the supplied certificate"; then
+                    echo "This simply means that the user doesn't have any groups added"
+                fi
             fi
             
             read -n 1 -s -r -p "Press any key to continue..."
