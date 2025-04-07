@@ -678,289 +678,6 @@ get_tak_users() {
     echo "${users_array[@]}"
 }
 
-# Function to select from list of users
-select_user_from_list() {
-    clear_terminal
-    echo "=== Select User ==="
-    
-    # Get list of users
-    users=($(get_tak_users))
-    
-    # Check if we got any users
-    if [ ${#users[@]} -eq 0 ]; then
-        echo "No users found in the system."
-        read -n 1 -s -r -p "Press any key to continue..."
-        return ""
-    fi
-    
-    # Display list of users
-    echo "Available users:"
-    PS3="Enter user number (or 0 to cancel): "
-    select selected_user in "${users[@]}" "Cancel"; do
-        if [ "$REPLY" -eq "0" ] || [ "$REPLY" -eq "$((${#users[@]} + 1))" ]; then
-            echo "Operation cancelled."
-            return ""
-        fi
-        
-        if [ "$REPLY" -gt 0 ] && [ "$REPLY" -le "${#users[@]}" ]; then
-            echo "Selected user: $selected_user"
-            echo "$selected_user"
-            break
-        else
-            echo "Invalid selection. Please try again."
-        fi
-    done
-}
-
-# Function to add a user to a group
-add_user_to_group() {
-    clear_terminal
-    echo "=== Add User to Group ==="
-    
-    # Get username from list
-    echo "Select a user to add to a group:"
-    username=$(select_user_from_list)
-    
-    # Check if user selection was cancelled
-    if [ -z "$username" ]; then
-        return
-    fi
-    
-    # Prompt for group name
-    read -p "Enter the group name: " group_name
-    if [ -z "$group_name" ]; then
-        echo "Error: Group name cannot be empty."
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    # Ask which type of group permission to add
-    echo "Select the type of group permission:"
-    echo "1. Full access (read and write)"
-    echo "2. Write-only access"
-    echo "3. Read-only access"
-    read -p "Enter your choice [1-3]: " perm_choice
-    
-    # Define UserManager.jar location
-    user_manager="/opt/tak/utils/UserManager.jar"
-    
-    # Check if the file exists
-    if [ ! -f "$user_manager" ]; then
-        echo "Error: UserManager.jar not found at $user_manager"
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    case $perm_choice in
-        1)
-            # Full access (read and write)
-            echo "Adding user '$username' to group '$group_name' with full access..."
-            sudo java -jar "$user_manager" certmod -g "$group_name" -a "$username"
-            ;;
-        2)
-            # Write-only access
-            echo "Adding user '$username' to group '$group_name' with write-only access..."
-            sudo java -jar "$user_manager" certmod -ig "$group_name" -a "$username"
-            ;;
-        3)
-            # Read-only access
-            echo "Adding user '$username' to group '$group_name' with read-only access..."
-            sudo java -jar "$user_manager" certmod -og "$group_name" -a "$username"
-            ;;
-        *)
-            echo "Invalid option. Operation cancelled."
-            read -n 1 -s -r -p "Press any key to continue..."
-            return
-            ;;
-    esac
-    
-    if [ $? -eq 0 ]; then
-        echo "Successfully added user to group."
-    else
-        echo "Error: Failed to add user to group."
-    fi
-    
-    read -n 1 -s -r -p "Press any key to continue..."
-}
-
-# Function to remove a user from a group
-remove_user_from_group() {
-    clear_terminal
-    echo "=== Remove User from Group ==="
-    
-    # Get username from list
-    echo "Select a user to remove from a group:"
-    username=$(select_user_from_list)
-    
-    # Check if user selection was cancelled
-    if [ -z "$username" ]; then
-        return
-    fi
-    
-    # Prompt for group name
-    read -p "Enter the group name: " group_name
-    if [ -z "$group_name" ]; then
-        echo "Error: Group name cannot be empty."
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    # Ask which type of group permission to remove
-    echo "Select the type of group permission to remove:"
-    echo "1. Full access (read and write)"
-    echo "2. Write-only access"
-    echo "3. Read-only access"
-    read -p "Enter your choice [1-3]: " perm_choice
-    
-    # Define UserManager.jar location
-    user_manager="/opt/tak/utils/UserManager.jar"
-    
-    # Check if the file exists
-    if [ ! -f "$user_manager" ]; then
-        echo "Error: UserManager.jar not found at $user_manager"
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    case $perm_choice in
-        1)
-            # Full access (read and write)
-            echo "Adding user '$username' to group '$group_name' with full access..."
-            sudo java -jar "$user_manager" certmod -g "$group_name" -a "$username"
-            ;;
-        2)
-            # Write-only access
-            echo "Adding user '$username' to group '$group_name' with write-only access..."
-            sudo java -jar "$user_manager" certmod -ig "$group_name" -a "$username"
-            ;;
-        3)
-            # Read-only access
-            echo "Adding user '$username' to group '$group_name' with read-only access..."
-            sudo java -jar "$user_manager" certmod -og "$group_name" -a "$username"
-            ;;
-        *)
-            echo "Invalid option. Operation cancelled."
-            read -n 1 -s -r -p "Press any key to continue..."
-            return
-            ;;
-    esac
-    
-    if [ $? -eq 0 ]; then
-        echo "Successfully added user to group."
-    else
-        echo "Error: Failed to add user to group."
-    fi
-    
-    read -n 1 -s -r -p "Press any key to continue..."
-}
-
-# Function to remove a user from a group
-# Function to remove a user from a group
-remove_user_from_group() {
-    clear_terminal
-    echo "=== Remove User from Group ==="
-    
-    # Get username from list
-    echo "Select a user to remove from a group:"
-    username=$(select_user_from_list)
-    
-    # Check if user selection was cancelled
-    if [ -z "$username" ]; then
-        return
-    fi
-    
-    # Prompt for group name
-    read -p "Enter the group name: " group_name
-    if [ -z "$group_name" ]; then
-        echo "Error: Group name cannot be empty."
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    # Ask which type of group permission to remove
-    echo "Select the type of group permission to remove:"
-    echo "1. Full access (read and write)"
-    echo "2. Write-only access"
-    echo "3. Read-only access"
-    read -p "Enter your choice [1-3]: " perm_choice
-    
-    # Define UserManager.jar location
-    user_manager="/opt/tak/utils/UserManager.jar"
-    
-    # Check if the file exists
-    if [ ! -f "$user_manager" ]; then
-        echo "Error: UserManager.jar not found at $user_manager"
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    case $perm_choice in
-        1)
-            # Full access (read and write)
-            echo "Removing user '$username' from group '$group_name' (full access)..."
-            sudo java -jar "$user_manager" certmod -g "$group_name" -r "$username"
-            ;;
-        2)
-            # Write-only access
-            echo "Removing user '$username' from group '$group_name' (write-only access)..."
-            sudo java -jar "$user_manager" certmod -ig "$group_name" -r "$username"
-            ;;
-        3)
-            # Read-only access
-            echo "Removing user '$username' from group '$group_name' (read-only access)..."
-            sudo java -jar "$user_manager" certmod -og "$group_name" -r "$username"
-            ;;
-        *)
-            echo "Invalid option. Operation cancelled."
-            read -n 1 -s -r -p "Press any key to continue..."
-            return
-            ;;
-    esac
-    
-    if [ $? -eq 0 ]; then
-        echo "Successfully removed user from group."
-    else
-        echo "Error: Failed to remove user from group."
-    fi
-    
-    read -n 1 -s -r -p "Press any key to continue..."
-}
-
-# Function to view user group membership
-view_user_group_membership() {
-    clear_terminal
-    echo "=== View User Group Membership ==="
-    
-    # Get username from list
-    echo "Select a user to view group membership:"
-    username=$(select_user_from_list)
-    
-    # Check if user selection was cancelled
-    if [ -z "$username" ]; then
-        return
-    fi
-    
-    # Define UserManager.jar location
-    user_manager="/opt/tak/utils/UserManager.jar"
-    
-    # Check if the file exists
-    if [ ! -f "$user_manager" ]; then
-        echo "Error: UserManager.jar not found at $user_manager"
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    echo "Retrieving group membership for user '$username'..."
-    sudo java -jar "$user_manager" certmod -s "$username"
-    
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to retrieve user information."
-    fi
-    
-    # Wait for user to press enter before returning to menu
-    read -p "Press Enter to continue..."
-}
-
 # Function to modify group memberships specifically for iTAK users
 modify_itak_groups() {
     clear_terminal
@@ -999,28 +716,34 @@ modify_itak_groups() {
             
             echo "You selected: $selected_user"
             
-            # Display the current group membership
-            echo "Current group membership for $selected_user:"
+            # Define UserManager.jar location
             user_manager="/opt/tak/utils/UserManager.jar"
             
-            # Show current status
+            # Path to the user's certificate
+            cert_path="/opt/tak/certs/files/${selected_user}.pem"
+            
+            # Check if certificate exists
+            if [ ! -f "$cert_path" ]; then
+                echo "Error: Certificate not found at $cert_path"
+                read -n 1 -s -r -p "Press any key to continue..."
+                break
+            fi
+            
+            # Display the current group membership
+            echo "Current group membership for $selected_user:"
             sudo java -jar "$user_manager" certmod -s "$selected_user"
             
             # Display group modification options
             echo ""
             echo "Group Modification Options:"
-            echo "1. Add user to group (full access)"
-            echo "2. Add user to group (write-only access)"
-            echo "3. Add user to group (read-only access)"
-            echo "4. Remove user from group (full access)"
-            echo "5. Remove user from group (write-only access)"
-            echo "6. Remove user from group (read-only access)"
-            echo "7. Cancel"
+            echo "1. Add user to group"
+            echo "2. Remove user from group"
+            echo "3. Cancel"
             echo ""
-            read -p "Enter your choice [1-7]: " mod_choice
+            read -p "Enter your choice [1-3]: " mod_choice
             
             # If cancel is selected
-            if [ "$mod_choice" -eq 7 ]; then
+            if [ "$mod_choice" -eq 3 ]; then
                 echo "Operation cancelled."
                 read -n 1 -s -r -p "Press any key to continue..."
                 break
@@ -1037,42 +760,22 @@ modify_itak_groups() {
             # Perform the selected action
             case $mod_choice in
                 1)
-                    # Add user to group (full access)
-                    echo "Adding user '$selected_user' to group '$group_name' with full access..."
-                    sudo java -jar "$user_manager" certmod -g "$group_name" -a "$selected_user"
+                    # Add user to group
+                    echo "Adding user '$selected_user' to group '$group_name'..."
+                    sudo java -jar "$user_manager" certmod -g "$group_name" "$cert_path"
                     ;;
                 2)
-                    # Add user to group (write-only access)
-                    echo "Adding user '$selected_user' to group '$group_name' with write-only access..."
-                    sudo java -jar "$user_manager" certmod -ig "$group_name" -a "$selected_user"
-                    ;;
-                3)
-                    # Add user to group (read-only access)
-                    echo "Adding user '$selected_user' to group '$group_name' with read-only access..."
-                    sudo java -jar "$user_manager" certmod -og "$group_name" -a "$selected_user"
-                    ;;
-                4)
-                    # Remove user from group (full access)
-                    echo "Removing user '$selected_user' from group '$group_name' (full access)..."
-                    sudo java -jar "$user_manager" certmod -g "$group_name" -r "$selected_user"
-                    ;;
-                5)
-                    # Remove user from group (write-only access)
-                    echo "Removing user '$selected_user' from group '$group_name' (write-only access)..."
-                    sudo java -jar "$user_manager" certmod -ig "$group_name" -r "$selected_user"
-                    ;;
-                6)
-                    # Remove user from group (read-only access)
-                    echo "Removing user '$selected_user' from group '$group_name' (read-only access)..."
-                    sudo java -jar "$user_manager" certmod -og "$group_name" -r "$selected_user"
+                    # Remove user from group
+                    echo "Removing user '$selected_user' from group '$group_name'..."
+                    sudo java -jar "$user_manager" certmod -r -g "$group_name" "$cert_path"
                     ;;
                 *)
                     echo "Invalid option selected."
                     ;;
             esac
             
-            # Show updated status
-            if [ "$mod_choice" -ge 1 ] && [ "$mod_choice" -le 6 ]; then
+            # Show updated status if an action was performed
+            if [ "$mod_choice" -eq 1 ] || [ "$mod_choice" -eq 2 ]; then
                 echo ""
                 echo "Updated group membership for $selected_user:"
                 sudo java -jar "$user_manager" certmod -s "$selected_user"
@@ -1262,11 +965,10 @@ while true; do
     echo "4. Show Current Server Configuration"
     echo "5. List Current Users"
     echo "6. Remove User"
-    echo "7. Manage Group Membership"
-    echo "8. Modify iTAK User Groups"
-    echo "9. Exit"
+    echo "7. Modify iTAK User Groups"
+    echo "8. Exit"
     echo ""
-    read -p "Enter your choice [1-9]: " main_choice
+    read -p "Enter your choice [1-8]: " main_choice
 
     case $main_choice in
       1)
@@ -1347,23 +1049,18 @@ while true; do
         ;;
         
       7)
-        # Manage group membership
-        manage_group_membership
-        ;;
-        
-      8)
         # Modify iTAK user groups
         modify_itak_groups
         ;;
 
-      9)
+      8)
         clear_terminal
         echo "Exiting User Configuration Tool."
         exit 0
         ;;
         
       *)
-        echo "Invalid option. Please select 1-9."
+        echo "Invalid option. Please select 1-8."
         read -n 1 -s -r -p "Press any key to continue..."
         ;;
     esac
