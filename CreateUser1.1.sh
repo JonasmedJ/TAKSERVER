@@ -841,7 +841,6 @@ remove_user() {
         fi
     done
 }
-}
 
 # Function to remove a user from a group
 remove_user_from_group() {
