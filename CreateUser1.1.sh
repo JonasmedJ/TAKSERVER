@@ -736,7 +736,7 @@ modify_itak_groups() {
             
             # Check if the error message about user not found is displayed
             if echo "$group_output" | grep -q "Could not find a user with the name.*extracted from the supplied certificate"; then
-                echo "This simply means that the user doesn't have any groups added."
+                echo " - This simply means that the user doesn't have any groups added yet."
             fi
             
             # Display group modification options
@@ -756,7 +756,7 @@ modify_itak_groups() {
             fi
             
             # Get group name
-            read -p "Enter the group name: " group_name
+            read -p "Enter the group name (Beware of case sensitivity): " group_name
             if [ -z "$group_name" ]; then
                 echo "Error: Group name cannot be empty."
                 read -n 1 -s -r -p "Press any key to continue..."
@@ -789,7 +789,7 @@ modify_itak_groups() {
                 
                 # Check again if the error message about user not found is displayed
                 if echo "$updated_output" | grep -q "Could not find a user with the name.*extracted from the supplied certificate"; then
-                    echo "This simply means that the user doesn't have any groups added"
+                    echo " - This simply means that the user doesn't have any groups added yet."
                 fi
             fi
             
@@ -977,7 +977,7 @@ while true; do
     echo "4. Show Current Server Configuration"
     echo "5. List Current Users"
     echo "6. Remove User"
-    echo "7. Modify iTAK User Groups"
+    echo "7. Modify ITAK User Groups"
     echo "8. Exit"
     echo ""
     read -p "Enter your choice [1-8]: " main_choice
