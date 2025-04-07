@@ -14,142 +14,6 @@ clear_terminal() {
     clear
 }
 
-# Main execution starts here
-
-# Trap on ERR for cleanup
-trap cleanup ERR
-
-# Display welcome message at start
-clear_terminal
-display_welcome
-
-# Load configuration on start
-load_configuration_on_start
-
-while true; do
-    # Clear terminal and show menu
-    clear_terminal
-    echo "TAK Server User Configuration Tool"
-    echo "==================================="
-    echo "Please select an option:"
-    echo "1. Create ITAK Configuration"
-    echo "2. Create ATAK Configuration"
-    echo "3. Configure TAK Server Settings"
-    echo "4. Show Current Server Configuration"
-    echo "5. List Current Users"
-    echo "6. Remove User"
-    echo "7. Manage Group Membership"
-    echo "8. Modify iTAK User Groups"
-    echo "9. Exit"
-    echo ""
-    read -p "Enter your choice [1-9]: " main_choice
-
-    case $main_choice in
-      1)
-        clear_terminal
-        echo "Running ITAK user creation."
-        
-        # Run the simplified iTAK configuration process (configuration check is now inside the function)
-        create_itak_configuration
-        ;;
-
-      2)
-        echo "Running ATAK user creation."
-        platform="android"
-        
-        # Check if we have all required configuration values
-        if [ -z "$CA_Password" ] || [ -z "$CACert" ] || [ -z "$TAKServer_Name" ] || [ -z "$Connection_Name" ]; then
-            echo "Missing configuration values. Please configure your TAK Server settings first."
-            configure_variables
-        fi
-        
-        # Create folder structure
-        create_data_package_subfolder
-        
-        # Setup truststore
-        setup_truststore
-        
-        # Get user details
-        get_user_details
-        
-        # Download map files
-        download_map_files
-        
-        # Create full Android configuration
-        create_android_config
-        
-        # Create full manifest with maps
-        create_full_manifest
-        
-        # Create full zip file
-        create_zip ""
-        
-        # Now create preferences-only configuration
-        create_prefs_only_config
-        
-        # Create preferences-only manifest with maps
-        create_pref_manifest
-        
-        # Create preferences-only zip file
-        create_zip "-pref"
-        
-        # Fix ownership for the created folder and zip files
-        fix_ownership "$subfolder"
-        fix_ownership "${subfolder}.zip"
-        fix_ownership "${subfolder}-pref.zip"
-        
-        # Wait for user to press a key before returning to the menu
-        read -n 1 -s -r -p "Press any key to continue..."
-        ;;
-        
-      3)
-        # Configure TAK Server settings
-        configure_variables
-        ;;
-        
-      4)
-        # Display current configuration
-        display_current_config
-        ;;
-
-      5)
-        # List all users
-        list_all_users
-        ;;
-        
-      6)
-        # Remove user
-        remove_user
-        ;;
-        
-      7)
-        # Manage group membership
-        manage_group_membership
-        ;;
-        
-      8)
-        # Modify iTAK user groups
-        modify_itak_groups
-        ;;
-
-      9)
-        clear_terminal
-        echo "Exiting User Configuration Tool."
-        exit 0
-        ;;
-        
-      *)
-        echo "Invalid option. Please select 1-9."
-        read -n 1 -s -r -p "Press any key to continue..."
-        ;;
-    esac
-done
-
-# On successful completion, remove the ERR trap
-trap - ERR
-
-echo "Script completed successfully."
-
 # Configuration file path
 config_file="$HOME/.tak_server_config"
 
@@ -158,6 +22,15 @@ CA_Password=""
 CACert=""
 TAKServer_Name=""
 Connection_Name=""
+
+# Determine the home directory of the user who invoked sudo
+home_dir=$(eval echo ~$SUDO_USER)
+
+# Define the base directory
+base_dir="$home_dir/Documents/dataPackage"
+
+# Global variable for the subfolder
+subfolder=""
 
 # Function to load configuration if it exists
 load_configuration() {
@@ -181,6 +54,15 @@ EOL
     echo "Configuration saved successfully."
 }
 
+# Define cleanup function
+cleanup() {
+    echo "An error occurred. Cleaning up..."
+    if [ -n "$subfolder" ] && [ -d "$subfolder" ]; then
+        rm -rf "$subfolder"
+    fi
+    exit 1
+}
+
 # Function to configure variables
 configure_variables() {
     clear_terminal
@@ -190,7 +72,48 @@ configure_variables() {
     if [ -n "$CA_Password" ]; then
         echo "Current CA Password: $CA_Password"
     fi
-    read -p "Enter CA Password [default: atakatak]: " new_ca_password
+    read -p "Enter your choice [1-3]: " perm_choice
+    
+    # Define UserManager.jar location
+    user_manager="/opt/tak/utils/UserManager.jar"
+    
+    # Check if the file exists
+    if [ ! -f "$user_manager" ]; then
+        echo "Error: UserManager.jar not found at $user_manager"
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    case $perm_choice in
+        1)
+            # Full access (read and write)
+            echo "Removing user '$username' from group '$group_name' (full access)..."
+            sudo java -jar "$user_manager" certmod -g "$group_name" -r "$username"
+            ;;
+        2)
+            # Write-only access
+            echo "Removing user '$username' from group '$group_name' (write-only access)..."
+            sudo java -jar "$user_manager" certmod -ig "$group_name" -r "$username"
+            ;;
+        3)
+            # Read-only access
+            echo "Removing user '$username' from group '$group_name' (read-only access)..."
+            sudo java -jar "$user_manager" certmod -og "$group_name" -r "$username"
+            ;;
+        *)
+            echo "Invalid option. Operation cancelled."
+            read -n 1 -s -r -p "Press any key to continue..."
+            return
+            ;;
+    esac
+    
+    if [ $? -eq 0 ]; then
+        echo "Successfully removed user from group."
+    else
+        echo "Error: Failed to remove user from group."
+    fi
+    
+    read -n 1 -s -r -p "Press any key to continue..." "Enter CA Password [default: atakatak]: " new_ca_password
     CA_Password=${new_ca_password:-${CA_Password:-"atakatak"}}
     
     if [ -n "$CACert" ]; then
@@ -230,15 +153,6 @@ load_configuration_on_start() {
         configure_variables
     fi
 }
-
-# Determine the home directory of the user who invoked sudo
-home_dir=$(eval echo ~$SUDO_USER)
-
-# Define the base directory
-base_dir="$home_dir/Documents/dataPackage"
-
-# Global variable for the subfolder
-subfolder=""
 
 # Function to create the dataPackage directory and a new subfolder inside it
 create_data_package_subfolder() {
@@ -282,15 +196,6 @@ create_data_package_subfolder() {
     
     # Notify the user
     echo "Created subfolder at: $subfolder"
-}
-
-# Define cleanup function
-cleanup() {
-    echo "An error occurred. Cleaning up..."
-    if [ -n "$subfolder" ] && [ -d "$subfolder" ]; then
-        rm -rf "$subfolder"
-    fi
-    exit 1
 }
 
 # Function to download map files
@@ -530,389 +435,6 @@ display_current_config() {
     read -n 1 -s -r -p "Press any key to continue..."
 }
 
-# Function to view user group membership
-view_user_group_membership() {
-    clear_terminal
-    echo "=== View User Group Membership ==="
-    
-    # Get username from list
-    echo "Select a user to view group membership:"
-    username=$(select_user_from_list)
-    
-    # Check if user selection was cancelled
-    if [ -z "$username" ]; then
-        return
-    fi
-    
-    # Define UserManager.jar location
-    user_manager="/opt/tak/utils/UserManager.jar"
-    
-    # Check if the file exists
-    if [ ! -f "$user_manager" ]; then
-        echo "Error: UserManager.jar not found at $user_manager"
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    echo "Retrieving group membership for user '$username'..."
-    sudo java -jar "$user_manager" certmod -s "$username"
-    
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to retrieve user information."
-    fi
-    
-    # Wait for user to press enter before returning to menu
-    read -p "Press Enter to continue..."
-}
-
-# Function to modify group memberships specifically for iTAK users
-modify_itak_groups() {
-    clear_terminal
-    echo "=== Modify iTAK User Groups ==="
-    
-    # Find iPhone users (-ios.zip)
-    iphone_users=()
-    
-    # Find all iPhone user zip files
-    for zip_file in "$base_dir"/*-ios.zip; do
-        if [ -f "$zip_file" ]; then
-            zip_name=$(basename "$zip_file" -ios.zip)
-            iphone_users+=("$zip_name")
-        fi
-    done
-    
-    # Check if there are any iPhone users
-    if [ ${#iphone_users[@]} -eq 0 ]; then
-        echo "No iPhone (iTAK) users found."
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    # Display menu of iPhone users
-    echo "Select an iTAK user to modify groups:"
-    PS3="Enter number (or 0 to cancel): "
-    select user_to_modify in "${iphone_users[@]}" "Cancel"; do
-        if [ "$REPLY" -eq "$((${#iphone_users[@]}+1))" ] || [ "$REPLY" -eq 0 ]; then
-            echo "Operation cancelled."
-            read -n 1 -s -r -p "Press any key to continue..."
-            return
-        fi
-        
-        if [ "$REPLY" -gt 0 ] && [ "$REPLY" -le "${#iphone_users[@]}" ]; then
-            selected_user="${iphone_users[$((REPLY-1))]}"
-            
-            echo "You selected: $selected_user"
-            
-            # Display the current group membership
-            echo "Current group membership for $selected_user:"
-            user_manager="/opt/tak/utils/UserManager.jar"
-            
-            # Show current status
-            sudo java -jar "$user_manager" certmod -s "$selected_user"
-            
-            # Display group modification options
-            echo ""
-            echo "Group Modification Options:"
-            echo "1. Add user to group (full access)"
-            echo "2. Add user to group (write-only access)"
-            echo "3. Add user to group (read-only access)"
-            echo "4. Remove user from group (full access)"
-            echo "5. Remove user from group (write-only access)"
-            echo "6. Remove user from group (read-only access)"
-            echo "7. Cancel"
-            echo ""
-            read -p "Enter your choice [1-7]: " mod_choice
-            
-            # If cancel is selected
-            if [ "$mod_choice" -eq 7 ]; then
-                echo "Operation cancelled."
-                read -n 1 -s -r -p "Press any key to continue..."
-                break
-            fi
-            
-            # Get group name
-            read -p "Enter the group name: " group_name
-            if [ -z "$group_name" ]; then
-                echo "Error: Group name cannot be empty."
-                read -n 1 -s -r -p "Press any key to continue..."
-                break
-            fi
-            
-            # Perform the selected action
-            case $mod_choice in
-                1)
-                    # Add user to group (full access)
-                    echo "Adding user '$selected_user' to group '$group_name' with full access..."
-                    sudo java -jar "$user_manager" certmod -g "$group_name" -a "$selected_user"
-                    ;;
-                2)
-                    # Add user to group (write-only access)
-                    echo "Adding user '$selected_user' to group '$group_name' with write-only access..."
-                    sudo java -jar "$user_manager" certmod -ig "$group_name" -a "$selected_user"
-                    ;;
-                3)
-                    # Add user to group (read-only access)
-                    echo "Adding user '$selected_user' to group '$group_name' with read-only access..."
-                    sudo java -jar "$user_manager" certmod -og "$group_name" -a "$selected_user"
-                    ;;
-                4)
-                    # Remove user from group (full access)
-                    echo "Removing user '$selected_user' from group '$group_name' (full access)..."
-                    sudo java -jar "$user_manager" certmod -g "$group_name" -r "$selected_user"
-                    ;;
-                5)
-                    # Remove user from group (write-only access)
-                    echo "Removing user '$selected_user' from group '$group_name' (write-only access)..."
-                    sudo java -jar "$user_manager" certmod -ig "$group_name" -r "$selected_user"
-                    ;;
-                6)
-                    # Remove user from group (read-only access)
-                    echo "Removing user '$selected_user' from group '$group_name' (read-only access)..."
-                    sudo java -jar "$user_manager" certmod -og "$group_name" -r "$selected_user"
-                    ;;
-                *)
-                    echo "Invalid option selected."
-                    ;;
-            esac
-            
-            # Show updated status
-            if [ "$mod_choice" -ge 1 ] && [ "$mod_choice" -le 6 ]; then
-                echo ""
-                echo "Updated group membership for $selected_user:"
-                sudo java -jar "$user_manager" certmod -s "$selected_user"
-            fi
-            
-            read -n 1 -s -r -p "Press any key to continue..."
-            break
-        else
-            echo "Invalid selection."
-        fi
-    done
-}
-
-# Function: Remove User
-remove_user() {
-    clear_terminal
-    echo "=== Remove User ==="
-    
-    # Arrays to store different types of users
-    android_users=()
-    iphone_users=()
-    all_users=()
-    user_types=()  # To track whether each user is Android or iPhone
-    
-    # Find Android user folders and zip files
-    for user_dir in "$base_dir"/*; do
-        if [ -d "$user_dir" ]; then
-            user_name=$(basename "$user_dir")
-            if [[ ! " ${android_users[@]} " =~ " ${user_name} " ]]; then
-                android_users+=("$user_name")
-                all_users+=("$user_name")
-                user_types+=("android")
-            fi
-        fi
-    done
-    
-    for zip_file in "$base_dir"/*.zip; do
-        if [ -f "$zip_file" ] && [[ ! "$zip_file" == *"-ios.zip" ]]; then
-            zip_name=$(basename "$zip_file" .zip)
-            # Handle the case where we have both normal and -pref zip files
-            if [[ "$zip_name" == *"-pref" ]]; then
-                base_name="${zip_name%-pref}"
-                if [[ ! " ${android_users[@]} " =~ " ${base_name} " ]]; then
-                    android_users+=("$base_name")
-                    all_users+=("$base_name")
-                    user_types+=("android")
-                fi
-            else
-                if [[ ! " ${android_users[@]} " =~ " ${zip_name} " ]]; then
-                    android_users+=("$zip_name")
-                    all_users+=("$zip_name")
-                    user_types+=("android")
-                fi
-            fi
-        fi
-    done
-    
-    # Find iPhone users
-    for zip_file in "$base_dir"/*-ios.zip; do
-        if [ -f "$zip_file" ]; then
-            zip_name=$(basename "$zip_file" -ios.zip)
-            iphone_users+=("$zip_name")
-            all_users+=("$zip_name (iPhone)")
-            user_types+=("iphone")
-        fi
-    done
-    
-    # Check if there are any users to remove
-    if [ ${#all_users[@]} -eq 0 ]; then
-        echo "No users found to remove."
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    # Display menu of users
-    echo "Select a user to remove:"
-    PS3="Enter number (or 0 to cancel): "
-    select user_to_remove in "${all_users[@]}" "Cancel"; do
-        if [ "$REPLY" -eq "$((${#all_users[@]}+1))" ] || [ "$REPLY" -eq 0 ]; then
-            echo "Operation cancelled."
-            read -n 1 -s -r -p "Press any key to continue..."
-            return
-        fi
-        
-        if [ "$REPLY" -gt 0 ] && [ "$REPLY" -le "${#all_users[@]}" ]; then
-            selected_index=$((REPLY-1))
-            selected_user="${all_users[$selected_index]}"
-            user_type="${user_types[$selected_index]}"
-            
-            # Extract the actual username from displayed name for iPhone users
-            if [[ "$user_type" == "iphone" ]]; then
-                actual_username="${selected_user% (iPhone)}"
-            else
-                actual_username="$selected_user"
-            fi
-            
-            echo "You selected to remove: $selected_user"
-            
-            # Different handling based on user type
-            if [[ "$user_type" == "android" ]]; then
-                # Android user removal
-                read -p "Are you sure you want to remove this Android user? This will delete all associated files. (y/n): " confirm
-                if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                    # Remove user directory if it exists
-                    if [ -d "$base_dir/$actual_username" ]; then
-                        rm -rf "$base_dir/$actual_username" && echo "Deleted user directory: $base_dir/$actual_username"
-                    fi
-                    
-                    # Remove user zip files
-                    rm -f "$base_dir/$actual_username.zip" && echo "Deleted user zip file: $base_dir/$actual_username.zip"
-                    rm -f "$base_dir/$actual_username-pref.zip" && echo "Deleted user preferences zip file: $base_dir/$actual_username-pref.zip"
-                    
-                    echo "Android user $actual_username has been removed."
-                else
-                    echo "Removal cancelled."
-                fi
-            else
-                # iPhone user removal
-                read -p "Are you sure you want to remove this iPhone user? This will revoke their certificate. (y/n): " confirm
-                if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                    # Indicate the revocation process
-                    echo "Revoking certificate for $actual_username..."
-                    
-                    # Run the revocation function
-                    if revoke_iphone_certificate "$actual_username" "$CACert"; then
-                        echo "Certificate for $actual_username has been revoked."
-                        
-                        # Remove certificate files
-                        echo "Removing certificate files..."
-                        sudo rm -f "/opt/tak/certs/files/$actual_username.csr" 2>/dev/null
-                        sudo rm -f "/opt/tak/certs/files/$actual_username.jks" 2>/dev/null
-                        sudo rm -f "/opt/tak/certs/files/$actual_username.pem" 2>/dev/null
-                        sudo rm -f "/opt/tak/certs/files/$actual_username.p12" 2>/dev/null
-                        sudo rm -f "/opt/tak/certs/files/$actual_username.key" 2>/dev/null
-                        sudo rm -f "/opt/tak/certs/files/$actual_username-trusted.pem" 2>/dev/null
-                        
-                        # Remove user zip file
-                        rm -f "$base_dir/$actual_username-ios.zip" && echo "Deleted user zip file: $base_dir/$actual_username-ios.zip"
-                        
-                        # Ask about server restart
-                        echo ""
-                        echo -e "\033[0;33mThe TAK Server service must be restarted to apply the revocation.\033[0m"
-                        read -p "Do you want to restart the TAK server? (y/n): " restart_server
-                        if [[ "$restart_server" =~ ^[Yy]$ ]]; then
-                            echo "Restarting TAK server..."
-                            sudo systemctl restart takserver
-                            echo "TAK server has been restarted."
-                        else
-                            echo "You should restart the server as soon as possible!"
-                        fi
-                    else
-                        echo "Error: Failed to revoke certificate for $actual_username."
-                    fi
-                else
-                    echo "Removal cancelled."
-                fi
-            fi
-            read -n 1 -s -r -p "Press any key to continue..."
-            break
-        else
-            echo "Invalid selection."
-        fi
-    done
-}
-
-# Function to remove a user from a group
-remove_user_from_group() {
-    clear_terminal
-    echo "=== Remove User from Group ==="
-    
-    # Get username from list
-    echo "Select a user to remove from a group:"
-    username=$(select_user_from_list)
-    
-    # Check if user selection was cancelled
-    if [ -z "$username" ]; then
-        return
-    fi
-    
-    # Prompt for group name
-    read -p "Enter the group name: " group_name
-    if [ -z "$group_name" ]; then
-        echo "Error: Group name cannot be empty."
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    # Ask which type of group permission to remove
-    echo "Select the type of group permission to remove:"
-    echo "1. Full access (read and write)"
-    echo "2. Write-only access"
-    echo "3. Read-only access"
-    read -p "Enter your choice [1-3]: " perm_choice
-    
-    # Define UserManager.jar location
-    user_manager="/opt/tak/utils/UserManager.jar"
-    
-    # Check if the file exists
-    if [ ! -f "$user_manager" ]; then
-        echo "Error: UserManager.jar not found at $user_manager"
-        read -n 1 -s -r -p "Press any key to continue..."
-        return
-    fi
-    
-    case $perm_choice in
-        1)
-            # Full access (read and write)
-            echo "Removing user '$username' from group '$group_name' (full access)..."
-            sudo java -jar "$user_manager" certmod -g "$group_name" -r "$username"
-            ;;
-        2)
-            # Write-only access
-            echo "Removing user '$username' from group '$group_name' (write-only access)..."
-            sudo java -jar "$user_manager" certmod -ig "$group_name" -r "$username"
-            ;;
-        3)
-            # Read-only access
-            echo "Removing user '$username' from group '$group_name' (read-only access)..."
-            sudo java -jar "$user_manager" certmod -og "$group_name" -r "$username"
-            ;;
-        *)
-            echo "Invalid option. Operation cancelled."
-            read -n 1 -s -r -p "Press any key to continue..."
-            return
-            ;;
-    esac
-    
-    if [ $? -eq 0 ]; then
-        echo "Successfully removed user from group."
-    else
-        echo "Error: Failed to remove user from group."
-    fi
-    
-    read -n 1 -s -r -p "Press any key to continue..."r -p "Press any key to continue..."
-}
-
 # Function to create iPhone configuration (simplified)
 create_itak_configuration() {
     clear_terminal
@@ -1135,41 +657,6 @@ EOT
     return $?
 }
 
-# Function to manage group membership
-manage_group_membership() {
-    clear_terminal
-    echo "=== Group Membership Management ==="
-    echo "1. Return to main menu"
-    echo "2. Add user to group"
-    echo "3. Remove user from group"
-    echo "4. See user group membership"
-    echo ""
-    read -p "Enter your choice [1-4]: " group_choice
-
-    case $group_choice in
-        1)
-            # Return to main menu
-            return
-            ;;
-        2)
-            # Add user to group
-            add_user_to_group
-            ;;
-        3)
-            # Remove user from group
-            remove_user_from_group
-            ;;
-        4)
-            # See user group membership
-            view_user_group_membership
-            ;;
-        *)
-            echo "Invalid option. Please select 1-4."
-            read -n 1 -s -r -p "Press any key to continue..."
-            ;;
-    esac
-}
-
 # Function to get user list from certificates
 get_tak_users() {
     # Define UserManager.jar location
@@ -1249,6 +736,77 @@ add_user_to_group() {
     
     # Ask which type of group permission to add
     echo "Select the type of group permission:"
+    echo "1. Full access (read and write)"
+    echo "2. Write-only access"
+    echo "3. Read-only access"
+    read -p "Enter your choice [1-3]: " perm_choice
+    
+    # Define UserManager.jar location
+    user_manager="/opt/tak/utils/UserManager.jar"
+    
+    # Check if the file exists
+    if [ ! -f "$user_manager" ]; then
+        echo "Error: UserManager.jar not found at $user_manager"
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    case $perm_choice in
+        1)
+            # Full access (read and write)
+            echo "Adding user '$username' to group '$group_name' with full access..."
+            sudo java -jar "$user_manager" certmod -g "$group_name" -a "$username"
+            ;;
+        2)
+            # Write-only access
+            echo "Adding user '$username' to group '$group_name' with write-only access..."
+            sudo java -jar "$user_manager" certmod -ig "$group_name" -a "$username"
+            ;;
+        3)
+            # Read-only access
+            echo "Adding user '$username' to group '$group_name' with read-only access..."
+            sudo java -jar "$user_manager" certmod -og "$group_name" -a "$username"
+            ;;
+        *)
+            echo "Invalid option. Operation cancelled."
+            read -n 1 -s -r -p "Press any key to continue..."
+            return
+            ;;
+    esac
+    
+    if [ $? -eq 0 ]; then
+        echo "Successfully added user to group."
+    else
+        echo "Error: Failed to add user to group."
+    fi
+    
+    read -n 1 -s -r -p "Press any key to continue..."
+}
+
+# Function to remove a user from a group
+remove_user_from_group() {
+    clear_terminal
+    echo "=== Remove User from Group ==="
+    
+    # Get username from list
+    echo "Select a user to remove from a group:"
+    username=$(select_user_from_list)
+    
+    # Check if user selection was cancelled
+    if [ -z "$username" ]; then
+        return
+    fi
+    
+    # Prompt for group name
+    read -p "Enter the group name: " group_name
+    if [ -z "$group_name" ]; then
+        echo "Error: Group name cannot be empty."
+        read -n 1 -s -r -p "Press any key to continue..."
+        return
+    fi
+    
+    # Ask which type of group permission to remove
+    echo "Select the type of group permission to remove:"
     echo "1. Full access (read and write)"
     echo "2. Write-only access"
     echo "3. Read-only access"
