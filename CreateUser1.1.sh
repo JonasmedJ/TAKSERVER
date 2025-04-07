@@ -729,9 +729,10 @@ modify_itak_groups() {
                 break
             fi
             
-            # Display the current group membership
+            # Display the current group membership - Use certsum for status check instead of certmod -s
             echo "Current group membership for $selected_user:"
-            sudo java -jar "$user_manager" certmod -s "$selected_user"
+            # Using certsum to get the status instead of certmod -s
+            sudo java -jar "$user_manager" certsum "$selected_user"
             
             # Display group modification options
             echo ""
@@ -778,7 +779,8 @@ modify_itak_groups() {
             if [ "$mod_choice" -eq 1 ] || [ "$mod_choice" -eq 2 ]; then
                 echo ""
                 echo "Updated group membership for $selected_user:"
-                sudo java -jar "$user_manager" certmod -s "$selected_user"
+                # Using certsum to get the status instead of certmod -s
+                sudo java -jar "$user_manager" certsum "$selected_user"
             fi
             
             read -n 1 -s -r -p "Press any key to continue..."
